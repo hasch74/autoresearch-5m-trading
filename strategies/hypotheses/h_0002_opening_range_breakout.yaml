@@ -1,0 +1,40 @@
+hypothesis_id: h_0002
+name: opening_range_breakout
+version: "0.1"
+
+idea: >
+  In the first 30 minutes (6 bars at 5m), define the opening range as
+  [low_of_first_6_bars, high_of_first_6_bars].
+  After bar 6, enter long when price breaks above the opening range high
+  with ATR spread in an acceptable range and RVOL elevated.
+  Stop: below the opening range low. Target: 2x the opening range width.
+
+created_by: "human"
+created_at: "2026-05-26"
+
+universe: "liquid_us_largecaps"
+timeframe: "5m"
+holding_period_bars: 6
+entry_type: "long"
+direction_bias: "long_only"
+risk_model: "fixed_fractional"
+
+required_features:
+  - or_high           # opening range high (first 6 bars)
+  - or_low            # opening range low (first 6 bars)
+  - rvol_20
+  - atr_14
+
+family: opening_range_breakout
+
+parameters:
+  or_bars: 6                  # bars defining the opening range (= 30 min)
+  rvol_min: 1.2
+  max_range_atr_ratio: 2.0    # skip if opening range > 2x ATR (too wide)
+  stop_atr_mult: 1.0
+  take_profit_range_mult: 2.0  # target = 2x opening range width above breakout
+  max_hold_bars: 6
+
+status: "draft"
+
+eval: {}

@@ -1,0 +1,53 @@
+# Trading universe for autoresearch MVP
+# Protected file — do not modify via agent.
+
+timeframe: "5m"
+trading_hours:
+  open: "09:30"      # Eastern time
+  close: "16:00"     # Eastern time
+  timezone: "America/New_York"
+  calendar: "NYSE"
+
+# ETF benchmarks — always included, used for relative-strength features
+etfs:
+  - SPY
+  - QQQ
+  - IWM
+
+# Liquid large-cap US stocks — initial curated list
+# Criteria: avg daily volume > 5M shares, price > $10, not recent IPO
+stocks:
+  - AAPL
+  - MSFT
+  - AMZN
+  - GOOGL
+  - META
+  - NVDA
+  - TSLA
+  - JPM
+  - BAC
+  - GS
+  - XOM
+  - CVX
+  - JNJ
+  - UNH
+  - PFE
+  - LLY
+  - HD
+  - WMT
+  - COST
+  - V
+
+# Filters applied before any symbol enters a backtest or paper session
+filters:
+  min_avg_daily_volume_shares: 2_000_000
+  min_price_usd: 10.0
+  max_spread_bps: 20          # exclude if bid/ask spread > 20 bps
+  max_atr_pct_of_price: 0.05  # exclude if ATR/price > 5%
+  exclude_earnings_window_bars: 12   # skip 12 bars around earnings
+
+# Survivorship-bias note
+# This list contains only currently-tradeable symbols.
+# Historical simulations before 2022 carry unquantified survivorship bias.
+# Mark all backtest reports with: survivorship_bias_caveat: true
+survivorship_bias_unresolved: true
