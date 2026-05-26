@@ -1,6 +1,8 @@
 """Hypothesis strategy interfaces."""
 
-from typing import Any, Protocol, Sequence
+from typing import Protocol, Sequence
+
+from src.types import Bar, Signal
 
 
 class Hypothesis(Protocol):
@@ -12,5 +14,5 @@ class Hypothesis(Protocol):
     def required_features(self) -> Sequence[str]:
         """List required feature names."""
 
-    def generate_signals(self, bars: Any, features: Any) -> Any:
+    def generate_signals(self, bars: Sequence[Bar], features: dict) -> Sequence[Signal]:
         """Generate strategy signals for the current window."""

@@ -1,10 +1,12 @@
 """Backtester interfaces."""
 
-from typing import Any, Protocol
+from typing import Protocol
+
+from src.types import EvalResult
 
 
 class Backtester(Protocol):
     """Runs historical strategy evaluations."""
 
-    def run(self, hypothesis_id: str) -> Any:
+    def run(self, hypothesis_id: str) -> EvalResult:
         """Execute a backtest for one hypothesis."""
