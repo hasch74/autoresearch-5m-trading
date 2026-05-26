@@ -1,0 +1,88 @@
+version: 1
+project: autoresearch-5m-trading
+
+objective:
+  statement: "Maximize risk-adjusted net PnL after costs/slippage with strict ruin and drawdown controls."
+  optimization_metric: "composite_score"
+  must_include:
+    - net_pnl_after_costs
+    - max_drawdown_penalty
+    - slippage_sensitivity
+    - out_of_sample_stability
+
+scope:
+  timeframe: "5m"
+  universe_mode: "small_liquid_us_only_initially"
+  trading_hours: "regular_session_only"
+  overnight_positions: false
+
+agent_permissions:
+  allow_write:
+    - "strategies/hypotheses/**"
+    - "reports/**"
+    - "research_notes/**"
+  deny_write:
+    - "src/evaluator/**"
+    - "src/backtester/**"
+    - "src/risk/**"
+    - "src/broker_ibkr/**"
+    - "configs/costs.yaml"
+    - "configs/risk.yaml"
+
+agent_must_not:
+  - "send_real_orders"
+  - "read_or_modify_api_keys"
+  - "loosen_evaluation_rules"
+  - "reduce_cost_or_slippage_assumptions"
+  - "move_holdout_data_into_training"
+  - "delete_failed_tests"
+
+evaluation_gates:
+  - technical_validity
+  - net_backtest_with_costs
+  - walk_forward_validation
+  - minimum_trade_count
+  - drawdown_and_ruin_limits
+  - paper_trading_confirmation
+
+required_metrics:
+  - net_pnl
+  - profit_factor
+  - win_rate
+  - avg_win_to_avg_loss
+  - max_drawdown
+  - max_intraday_drawdown
+  - exposure_time
+  - trades_per_day
+  - slippage_sensitivity
+  - worst_day
+  - longest_losing_streak
+
+risk_limits:
+  max_risk_per_trade_pct: 0.25
+  max_daily_loss_pct: 1.0
+  max_weekly_loss_pct: 3.0
+  max_open_positions: 5
+  max_symbol_positions: 1
+  no_overnight: true
+  market_orders_initially_allowed: false
+  kill_switch_after_n_errors: true
+
+hypothesis_lifecycle:
+  - draft
+  - backtest_candidate
+  - validated_candidate
+  - paper_active
+  - paper_promoted
+  - quarantined
+  - retired
+
+research_loop:
+  day_session: "papertrade_and_collect_data"
+  post_close:
+    - propose_one_change_or_hypothesis
+    - run_backtest
+    - run_walk_forward
+    - run_cost_slippage_robustness_checks
+    - keep_or_revert
+    - record_result_always
