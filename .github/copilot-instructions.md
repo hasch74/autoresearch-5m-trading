@@ -26,6 +26,11 @@
 - Use small steps with validation after each step.
 - Prefer tests that reproduce bugs and prove fixes.
 
+## Review tooling
+
+- Prefer GitHub Copilot code review workflow for repository reviews.
+- Do not depend on non-GitHub review tool configuration in repository docs.
+
 ## Trading research guardrails
 
 - Agent may edit strategy hypotheses and research outputs only.
