@@ -51,9 +51,8 @@ def compute_features(
 
     # --- VWAP (cumulative within session) ---
     df["_typical"] = (df["high"] + df["low"] + df["close"]) / 3
-    df["_cum_tp_vol"] = df.groupby("_date").apply(
-        lambda g: (g["_typical"] * g["volume"]).cumsum(), include_groups=False
-    ).reset_index(level=0, drop=True)
+    df["_tp_vol"] = df["_typical"] * df["volume"]
+    df["_cum_tp_vol"] = df.groupby("_date")["_tp_vol"].cumsum()
     df["_cum_vol"] = df.groupby("_date")["volume"].cumsum()
     df["vwap"] = df["_cum_tp_vol"] / df["_cum_vol"].replace(0, np.nan)
 
@@ -90,22 +89,16 @@ def compute_features(
     df["ret_open_to_now"] = (df["close"] - df["_session_open_close"]) / df["_session_open_close"].replace(0, np.nan)
 
     # --- Opening range high/low (first or_bars bars of each session) ---
-    def _or_high(g: pd.DataFrame) -> pd.Series:
-        result = pd.Series(np.nan, index=g.index)
-        for i in range(len(g)):
-            n = min(i + 1, or_bars)
-            result.iloc[i] = g["high"].iloc[:n].max()
-        return result
-
-    def _or_low(g: pd.DataFrame) -> pd.Series:
-        result = pd.Series(np.nan, index=g.index)
-        for i in range(len(g)):
-            n = min(i + 1, or_bars)
-            result.iloc[i] = g["low"].iloc[:n].min()
-        return result
-
-    df["or_high"] = df.groupby("_date", group_keys=False).apply(_or_high)
-    df["or_low"] = df.groupby("_date", group_keys=False).apply(_or_low)
+    or_high_vals = np.empty(len(df))
+    or_low_vals = np.empty(len(df))
+    for date_val, group in df.groupby("_date"):
+        idx = group.index.tolist()
+        for j, i in enumerate(idx):
+            n = min(j + 1, or_bars)
+            or_high_vals[df.index.get_loc(i)] = group["high"].iloc[:n].max()
+            or_low_vals[df.index.get_loc(i)]  = group["low"].iloc[:n].min()
+    df["or_high"] = or_high_vals
+    df["or_low"]  = or_low_vals
 
     # Drop internal columns
     df = df.drop(columns=[c for c in df.columns if c.startswith("_")])

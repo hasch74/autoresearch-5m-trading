@@ -1,5 +1,7 @@
 """src.papertrader package."""
 
-from .interfaces import PaperTrader
+from .simulator import PaperFill, PaperPosition, PaperTrader
+from .interfaces import PaperTrader as PaperTraderProtocol
 
-__all__ = ["PaperTrader"]
+__all__ = ["PaperFill", "PaperPosition", "PaperTrader", "PaperTraderProtocol"]
+
