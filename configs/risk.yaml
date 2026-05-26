@@ -1,0 +1,46 @@
+# Risk management rules for autoresearch MVP
+# Protected file — agent must not modify.
+# Changing these rules requires human review and explicit commit.
+
+version: 1
+
+# Per-trade risk
+max_risk_per_trade_pct: 0.25       # % of account equity at risk per trade
+position_sizing_model: "fixed_fractional"
+
+# Daily / weekly hard limits
+max_daily_loss_pct: 1.0            # % of equity — triggers kill switch for the day
+max_weekly_loss_pct: 3.0           # % of equity — triggers kill switch for the week
+
+# Concentration limits
+max_open_positions: 5
+max_positions_per_symbol: 1        # no pyramiding
+
+# Session rules
+no_overnight_positions: true
+trade_only_in_regular_hours: true  # 09:30–16:00 ET, NYSE calendar
+close_all_before_market_close_bars: 1  # force flat 1 bar (5 min) before close
+
+# Order type restrictions
+market_orders_allowed: false        # limit/stop orders only initially
+bracket_orders_required: true       # entry + stop + take-profit must be submitted together
+
+# Kill switch
+kill_switch_after_consecutive_errors: 3  # halt trading after N consecutive fill/API errors
+kill_switch_after_n_rejected_orders: 5
+
+# Walk-forward window sizes (trading days)
+walk_forward:
+  train_days: 60
+  validate_days: 20
+  test_days: 20
+
+# Minimum trade count before a hypothesis result is considered meaningful
+min_trades_for_evaluation: 50
+
+# Promotion thresholds (composite_score must exceed these in each phase)
+promotion_thresholds:
+  backtest_candidate_min_composite_score: 0.55
+  validated_candidate_min_composite_score: 0.60
+  paper_active_min_composite_score: 0.65
+  paper_promoted_min_oos_trades: 30      # at least 30 paper trades required

@@ -1,0 +1,50 @@
+# Transaction cost and slippage model for autoresearch MVP
+# Protected file — agent must not modify or reduce these assumptions.
+# Conservative estimates are intentional to prevent overfitting on cost assumptions.
+
+version: 1
+
+# Broker commission (IBKR tiered model estimate for small retail account)
+commission:
+  model: "per_share"
+  rate_usd_per_share: 0.005          # $0.005/share (IBKR tiered, conservative)
+  min_per_order_usd: 1.00            # minimum $1 per order leg
+  max_pct_of_trade_value: 0.01       # cap at 1% of trade value
+
+# Slippage model
+slippage:
+  model: "atr_fraction"
+  entry_atr_fraction: 0.05           # 5% of ATR added to entry cost
+  exit_atr_fraction: 0.05            # 5% of ATR added to exit cost
+  min_slippage_bps: 2                # minimum 2 bps regardless of ATR
+
+# Bid/ask spread cost (half-spread paid on each side)
+spread:
+  model: "fixed_bps_plus_volume_impact"
+  base_half_spread_bps: 3            # 3 bps half-spread per side (conservative)
+  volume_impact_factor: 0.0          # set > 0 when position sizing allows larger sizes
+
+# Borrow cost for short positions (not used in Long/Flat initial scope)
+borrow:
+  model: "annualized_rate"
+  default_rate_pct_per_year: 1.0     # 1% p.a. default; updated per symbol when data available
+
+# Market impact — placeholder; not applied until position sizes are meaningful
+market_impact:
+  enabled: false
+  model: "square_root_model"
+  impact_coefficient: 0.1
+
+# Fill assumptions
+fill_model:
+  assume_limit_orders_filled_at_limit: false  # pessimistic: assume fill at limit±slippage
+  assume_partial_fills: false                 # simplified: all-or-nothing fills initially
+
+# Round-trip cost summary for reporting
+# round_trip_cost_bps ≈ 2*(commission_bps + half_spread_bps + slippage_bps)
+# For a $510 SPY share with 10 units:
+#   commission: $0.05 x2 = $0.10 → ~0.2 bps
+#   half spread: 3 bps x2 = 6 bps
+#   slippage: ~2 bps x2 = 4 bps
+#   total ≈ 10 bps round-trip
+estimated_round_trip_bps: 10        # used as a quick sanity-check floor in reports

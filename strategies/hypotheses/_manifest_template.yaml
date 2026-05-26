@@ -1,0 +1,41 @@
+# Hypothesis manifest template
+# Copy this file and fill in each field before adding a new hypothesis.
+# File naming: h_NNNN_short_name.yaml  (e.g. h_0001_vwap_pullback.yaml)
+# The corresponding Python file must have the same prefix.
+
+hypothesis_id: h_XXXX            # four-digit zero-padded id, assigned by system
+name: ""                          # snake_case short name
+version: "0.1"
+
+# Human-readable description of the edge being tested
+idea: ""
+
+# Who/what created this hypothesis
+created_by: "agent"               # "agent" or "human"
+created_at: "YYYY-MM-DD"
+
+# Scope
+universe: "liquid_us_largecaps"   # must match universe.yaml
+timeframe: "5m"
+holding_period_bars: 3            # allowed values: 1, 3, 6, 12
+entry_type: "long"                # "long", "long_flat", "short" (short not in MVP)
+direction_bias: "long_only"
+
+# Risk model used for position sizing
+risk_model: "fixed_fractional"    # must match risk.yaml
+
+# Required feature names (must be available in feature_store)
+required_features: []
+
+# Hypothesis family (restricts allowed families per research_policy)
+family: ""  # one of: opening_range_breakout, vwap_pullback, gap_continuation,
+            #         gap_fade, intraday_mean_reversion, relative_strength,
+            #         volume_expansion_breakout, atr_compression_expansion,
+            #         prev_day_high_low_reclaim, trend_day_filter
+
+# Lifecycle status — only the system updates this after evaluation gates
+status: "draft"  # draft | backtest_candidate | validated_candidate |
+                 #         paper_active | paper_promoted | quarantined | retired
+
+# Evaluation results (filled in by evaluator, not by agent)
+eval: {}

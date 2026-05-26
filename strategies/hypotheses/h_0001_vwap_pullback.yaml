@@ -1,0 +1,41 @@
+hypothesis_id: h_0001
+name: vwap_pullback_rvol
+version: "0.1"
+
+idea: >
+  After a strong opening momentum move (stock gapped up and is trading above VWAP),
+  wait for a pullback that holds VWAP with elevated relative volume.
+  Enter long when price bounces off VWAP with RVOL > 1.5 and ATR-based spread is acceptable.
+  Target: 3–6 bars. Stop: 1.5x ATR below VWAP touch.
+
+created_by: "human"
+created_at: "2026-05-26"
+
+universe: "liquid_us_largecaps"
+timeframe: "5m"
+holding_period_bars: 3
+entry_type: "long"
+direction_bias: "long_only"
+risk_model: "fixed_fractional"
+
+required_features:
+  - vwap
+  - rvol_20         # relative volume vs 20-day avg
+  - atr_14          # 14-bar ATR
+  - gap_pct         # today's gap vs prior close
+  - ret_open_to_now # return from open to current bar
+
+family: vwap_pullback
+
+# Parameters explored in this version
+parameters:
+  rvol_min: 1.5
+  max_spread_atr_fraction: 0.20
+  stop_atr_mult: 1.5
+  take_profit_atr_mult: 3.0
+  max_hold_bars: 6
+  gap_pct_min: 0.003     # require at least 0.3% gap
+
+status: "draft"
+
+eval: {}
