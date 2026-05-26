@@ -1,5 +1,7 @@
 """src.risk package."""
 
-from .interfaces import RiskManager
+from .manager import RiskManager, RiskState
+from .interfaces import RiskManager as RiskManagerProtocol
 
-__all__ = ["RiskManager"]
+__all__ = ["RiskManager", "RiskManagerProtocol", "RiskState"]
+
