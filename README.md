@@ -22,3 +22,13 @@ The agent can propose and test strategy hypotheses, but must not change the judg
 - protected: evaluator, backtester, risk rules, broker integration, and cost assumptions
 
 See `/research_policy.yaml` for the enforceable research policy and `/.github/copilot-instructions.md` for implementation behavior.
+
+## Current MVP Scaffold
+
+- `data/{raw,normalized,features,paper_trades}`
+- `src/{data_ingest,feature_store,backtester,papertrader,evaluator,risk,broker_ibkr,hypothesis_engine,agent_runner}`
+- `strategies/hypotheses`
+- `configs`
+- `reports`
+- `logs`
+- `research_notes`
