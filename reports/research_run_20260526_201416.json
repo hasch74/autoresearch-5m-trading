@@ -1,0 +1,34 @@
+{
+  "run_at": "2026-05-26T20:14:16.619974+00:00",
+  "hypotheses_evaluated": 2,
+  "results": {
+    "h_0001": {
+      "hypothesis_id": "h_0001",
+      "n_trades": 0,
+      "net_pnl": 0.0,
+      "composite_score": 0.3333,
+      "gate_passed": false,
+      "failed_gates": [
+        "min_trades: 0 < 30",
+        "min_win_rate: 0.000 < 0.4",
+        "min_profit_factor: 0.000 < 1.1",
+        "min_trades_per_day: 0.000 < 0.5"
+      ],
+      "recommended_status": "quarantined"
+    },
+    "h_0002": {
+      "hypothesis_id": "h_0002",
+      "n_trades": 46,
+      "net_pnl": -86.0965,
+      "composite_score": 0.3784,
+      "gate_passed": false,
+      "failed_gates": [
+        "max_drawdown: 12.086 > limit",
+        "min_net_pnl: -86.097 < 0.0",
+        "slippage_sensitivity: 1.202 > 1.0",
+        "min_trades_per_day: 0.151 < 0.5"
+      ],
+      "recommended_status": "quarantined"
+    }
+  }
+}

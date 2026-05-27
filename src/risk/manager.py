@@ -103,12 +103,12 @@ class RiskManager:
         """Update state after a fill is confirmed."""
         self.state.realized_pnl_today += pnl
         self.state.realized_pnl_week += pnl
-        if pnl > 0:
-            # reduce open position count on exit fills (simplified: 1 position per symbol)
-            if symbol in self.state.open_positions:
-                self.state.open_positions[symbol] = max(0, self.state.open_positions[symbol] - 1)
-                if self.state.open_positions[symbol] == 0:
-                    del self.state.open_positions[symbol]
+        # Reduce open position count on exit fills (simplified: 1 position per symbol).
+        # Loss-making exits must also close tracked exposure.
+        if symbol in self.state.open_positions:
+            self.state.open_positions[symbol] = max(0, self.state.open_positions[symbol] - 1)
+            if self.state.open_positions[symbol] == 0:
+                del self.state.open_positions[symbol]
 
     def record_entry(self, symbol: str) -> None:
         """Update state after entry order is accepted."""

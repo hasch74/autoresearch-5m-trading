@@ -33,7 +33,7 @@ class VwapPullbackRvol:
     max_hold_bars: int = 6
 
     def required_features(self) -> Sequence[str]:
-        return ["vwap", "rvol_20", "atr_14", "gap_pct", "ret_open_to_now"]
+        return ["vwap", "rvol_20", "atr_14", "session_gap_pct", "ret_open_to_now"]
 
     def generate_signals(
         self,
@@ -63,14 +63,14 @@ class VwapPullbackRvol:
         vwap: float | None = features.get("vwap")
         rvol: float | None = features.get("rvol_20")
         atr: float | None = features.get("atr_14")
-        gap_pct: float | None = features.get("gap_pct")
+        session_gap_pct: float | None = features.get("session_gap_pct")
 
         # Require all features present
-        if any(v is None for v in (vwap, rvol, atr, gap_pct)):
+        if any(v is None for v in (vwap, rvol, atr, session_gap_pct)):
             return []
 
         # Gate 1: stock must have gapped up
-        if gap_pct < self.gap_pct_min:
+        if session_gap_pct < self.gap_pct_min:
             return []
 
         # Gate 2: price must be at or just above VWAP (pullback touched VWAP)

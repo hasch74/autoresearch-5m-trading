@@ -1,0 +1,54 @@
+{
+  "run_at": "2026-05-26T20:34:11.854842+00:00",
+  "hypotheses_evaluated": 2,
+  "results": {
+    "h_0001": {
+      "hypothesis_id": "h_0001",
+      "n_trades": 42,
+      "net_pnl": -95.8362,
+      "composite_score": 0.3402,
+      "gate_passed": false,
+      "failed_gates": [
+        "min_win_rate: 0.381 < 0.4",
+        "min_profit_factor: 0.668 < 1.1",
+        "min_net_pnl: -95.836 < 0.0",
+        "slippage_sensitivity: 1.194 > 1.0",
+        "min_trades_per_day: 0.100 < 0.5",
+        "walk_forward: insufficient_folds"
+      ],
+      "walk_forward": {
+        "folds": 0,
+        "positive_folds": 0,
+        "positive_fold_ratio": 0.0,
+        "median_oos_net_pnl": 0.0,
+        "min_positive_fold_ratio": 0.6,
+        "min_median_oos_net_pnl": 0.0,
+        "passed": false
+      },
+      "recommended_status": "quarantined"
+    },
+    "h_0002": {
+      "hypothesis_id": "h_0002",
+      "n_trades": 38,
+      "net_pnl": -59.5894,
+      "composite_score": 0.4398,
+      "gate_passed": false,
+      "failed_gates": [
+        "min_net_pnl: -59.589 < 0.0",
+        "slippage_sensitivity: 2.647 > 1.0",
+        "min_trades_per_day: 0.114 < 0.5",
+        "walk_forward: insufficient_folds"
+      ],
+      "walk_forward": {
+        "folds": 0,
+        "positive_folds": 0,
+        "positive_fold_ratio": 0.0,
+        "median_oos_net_pnl": 0.0,
+        "min_positive_fold_ratio": 0.6,
+        "min_median_oos_net_pnl": 0.0,
+        "passed": false
+      },
+      "recommended_status": "quarantined"
+    }
+  }
+}
