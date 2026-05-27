@@ -200,8 +200,9 @@ def _normalise(raw: pd.DataFrame, symbol: str) -> pd.DataFrame:
     mask = (time_of_day >= rth_open) & (time_of_day < rth_close)
     df = df[mask].copy()
 
-    # available_time: bar close + 5 s (prevents accidental lookahead)
-    df["available_time"] = df["event_time"] + pd.Timedelta(seconds=5)
+    # EODHD intraday timestamps are bar-open timestamps.
+    # available_time is therefore bar close + 5 s to avoid lookahead.
+    df["available_time"] = df["event_time"] + pd.Timedelta(minutes=5, seconds=5)
 
     df["symbol"] = symbol
     df = df.rename(columns={"open": "open", "high": "high", "low": "low",

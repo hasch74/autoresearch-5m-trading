@@ -3,6 +3,7 @@ from pathlib import Path
 import pandas as pd
 
 from src.data_ingest import eodhd_sync
+from src.data_ingest.eodhd import _normalise
 
 
 def test_load_env_file_parses_token(tmp_path: Path) -> None:
@@ -12,6 +13,27 @@ def test_load_env_file_parses_token(tmp_path: Path) -> None:
     env = eodhd_sync.load_env_file(env_path)
 
     assert env["EODHD_API_TOKEN"] == "abc123"
+
+
+def test_normalise_uses_bar_open_timestamps_and_delays_availability() -> None:
+    raw = pd.DataFrame(
+        [
+            {
+                "datetime": 1735828200,  # 2025-01-02 14:30:00 UTC / 09:30 ET
+                "open": 100.0,
+                "high": 101.0,
+                "low": 99.5,
+                "close": 100.5,
+                "volume": 1000,
+            }
+        ]
+    )
+
+    norm = _normalise(raw, "SPY")
+
+    assert norm.loc[0, "event_time"] == pd.Timestamp("2025-01-02T14:30:00Z")
+    assert norm.loc[0, "available_time"] == pd.Timestamp("2025-01-02T14:35:05Z")
+    assert norm.loc[0, "symbol"] == "SPY"
 
 
 def test_load_universe_combines_and_deduplicates(tmp_path: Path) -> None:
