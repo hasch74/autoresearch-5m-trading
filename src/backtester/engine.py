@@ -93,6 +93,9 @@ def run_backtest(
     if df.empty:
         return _empty_eval(hypothesis)
 
+    if df["symbol"].nunique() != 1:
+        raise ValueError("run_backtest expects a single-symbol DataFrame")
+
     feature_cols = [c for c in df.columns if c not in
                     ("event_time", "available_time", "symbol",
                      "open", "high", "low", "close", "volume")]

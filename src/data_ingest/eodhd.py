@@ -152,12 +152,17 @@ def _call_api(
 ) -> pd.DataFrame:
     """Call EODHD intraday endpoint; return raw DataFrame with column 'datetime'."""
     url = _BASE_URL.format(symbol=symbol)
+    # EODHD intraday API expects Unix seconds, not ISO date strings.
+    start_ts = int(datetime.combine(start, datetime.min.time(), tzinfo=timezone.utc).timestamp())
+    end_ts = int(
+        datetime.combine(end + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc).timestamp()
+    ) - 1
     params = {
         "api_token": api_key,
         "fmt": "json",
         "interval": _INTERVAL,
-        "from": start.isoformat(),
-        "to": end.isoformat(),
+        "from": start_ts,
+        "to": end_ts,
     }
     resp = requests.get(url, params=params, timeout=30)
     resp.raise_for_status()

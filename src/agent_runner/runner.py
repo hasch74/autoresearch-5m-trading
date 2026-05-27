@@ -24,16 +24,19 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+import yaml
 
 from src.backtester.engine import run_backtest
+from src.backtester.walk_forward import walk_forward_splits
 from src.evaluator.scoring import check_gates, score
 from src.hypothesis_engine.registry import load_all
-from src.types import HypothesisStatus
+from src.types import EvalResult, HypothesisStatus
 
 logger = logging.getLogger(__name__)
 
 _REPORTS_DIR = Path("reports")
 _FEATURES_DIR = Path("data/features")
+_RISK_CONFIG_PATH = Path("configs/risk.yaml")
 
 
 class ResearchRunner:
@@ -54,10 +57,12 @@ class ResearchRunner:
         features_dir: Path = _FEATURES_DIR,
         reports_dir: Path = _REPORTS_DIR,
         hypotheses_dir: Path = Path("strategies/hypotheses"),
+        risk_config_path: Path = _RISK_CONFIG_PATH,
     ) -> None:
         self.features_dir = features_dir
         self.reports_dir = reports_dir
         self.hypotheses_dir = hypotheses_dir
+        self.risk_config_path = risk_config_path
 
     def run_once(self) -> dict[str, Any]:
         """Execute one research cycle.
@@ -77,25 +82,54 @@ class ResearchRunner:
             logger.warning("No feature data found in %s; run data_ingest first", self.features_dir)
             return {"hypotheses_evaluated": 0, "warning": "no_feature_data"}
 
-        combined_df = pd.concat(feature_frames.values(), ignore_index=True).sort_values("event_time")
-
         results = {}
         for hyp_id, hyp in registry.items():
             logger.info("Evaluating %s ...", hyp_id)
             try:
-                raw_result = run_backtest(combined_df, hyp)
+                symbol_results: list[EvalResult] = []
+                for symbol, frame in feature_frames.items():
+                    symbol_df = frame.sort_values("event_time").reset_index(drop=True)
+                    if symbol_df.empty:
+                        continue
+                    symbol_result = run_backtest(symbol_df, hyp)
+                    symbol_results.append(symbol_result)
+
+                if not symbol_results:
+                    raise ValueError("no_symbol_results")
+
+                raw_result = self._aggregate_symbol_results(hyp, symbol_results)
                 scored_result = score(raw_result)
                 gate = check_gates(scored_result)
+                wf_summary = self._run_walk_forward(feature_frames, hyp)
+
+                failed_gates = list(gate.failed_gates)
+                if not wf_summary["passed"]:
+                    if wf_summary["folds"] == 0:
+                        failed_gates.append("walk_forward: insufficient_folds")
+                    else:
+                        if wf_summary["positive_fold_ratio"] < wf_summary["min_positive_fold_ratio"]:
+                            failed_gates.append(
+                                "walk_forward_positive_fold_ratio: "
+                                f"{wf_summary['positive_fold_ratio']:.3f} < "
+                                f"{wf_summary['min_positive_fold_ratio']:.3f}"
+                            )
+                        if wf_summary["median_oos_net_pnl"] <= wf_summary["min_median_oos_net_pnl"]:
+                            failed_gates.append(
+                                "walk_forward_median_oos_net_pnl: "
+                                f"{wf_summary['median_oos_net_pnl']:.3f} <= "
+                                f"{wf_summary['min_median_oos_net_pnl']:.3f}"
+                            )
 
                 outcome = {
                     "hypothesis_id": hyp_id,
                     "n_trades": scored_result.total_trades,
                     "net_pnl": scored_result.net_pnl,
                     "composite_score": scored_result.composite_score,
-                    "gate_passed": gate.passed,
-                    "failed_gates": gate.failed_gates,
+                    "gate_passed": gate.passed and wf_summary["passed"],
+                    "failed_gates": failed_gates,
+                    "walk_forward": wf_summary,
                     "recommended_status": (
-                        HypothesisStatus.VALIDATED_CANDIDATE.value if gate.passed
+                        HypothesisStatus.VALIDATED_CANDIDATE.value if (gate.passed and wf_summary["passed"])
                         else HypothesisStatus.QUARANTINED.value
                     ),
                 }
@@ -137,3 +171,131 @@ class ResearchRunner:
         path = self.reports_dir / f"research_run_{ts}.json"
         path.write_text(json.dumps(report, indent=2, default=str))
         logger.info("Report saved to %s", path)
+
+    def _run_walk_forward(self, feature_frames: dict[str, pd.DataFrame], hypothesis: Any) -> dict[str, Any]:
+        config = self._load_walk_forward_config()
+        min_positive_fold_ratio = 0.60
+        min_median_oos_net_pnl = 0.0
+
+        oos_results: list[EvalResult] = []
+        for frame in feature_frames.values():
+            symbol_df = frame.sort_values("event_time").reset_index(drop=True)
+            if symbol_df.empty:
+                continue
+            for _train_df, _val_df, test_df in walk_forward_splits(
+                symbol_df,
+                train_days=config["train_days"],
+                validate_days=config["validate_days"],
+                test_days=config["test_days"],
+            ):
+                if test_df.empty:
+                    continue
+                oos_results.append(run_backtest(test_df, hypothesis))
+
+        folds = len(oos_results)
+        if folds == 0:
+            return {
+                "folds": 0,
+                "positive_folds": 0,
+                "positive_fold_ratio": 0.0,
+                "median_oos_net_pnl": 0.0,
+                "min_positive_fold_ratio": min_positive_fold_ratio,
+                "min_median_oos_net_pnl": min_median_oos_net_pnl,
+                "passed": False,
+            }
+
+        net_pnls = sorted(r.net_pnl for r in oos_results)
+        positive_folds = sum(1 for p in net_pnls if p > 0)
+        positive_fold_ratio = positive_folds / folds
+        median_idx = folds // 2
+        if folds % 2 == 1:
+            median_oos_net_pnl = net_pnls[median_idx]
+        else:
+            median_oos_net_pnl = (net_pnls[median_idx - 1] + net_pnls[median_idx]) / 2
+
+        passed = (
+            positive_fold_ratio >= min_positive_fold_ratio
+            and median_oos_net_pnl > min_median_oos_net_pnl
+        )
+        return {
+            "folds": folds,
+            "positive_folds": positive_folds,
+            "positive_fold_ratio": round(positive_fold_ratio, 4),
+            "median_oos_net_pnl": round(median_oos_net_pnl, 4),
+            "min_positive_fold_ratio": min_positive_fold_ratio,
+            "min_median_oos_net_pnl": min_median_oos_net_pnl,
+            "passed": passed,
+        }
+
+    def _load_walk_forward_config(self) -> dict[str, int]:
+        defaults = {"train_days": 60, "validate_days": 20, "test_days": 20}
+        if not self.risk_config_path.exists():
+            return defaults
+
+        try:
+            data = yaml.safe_load(self.risk_config_path.read_text(encoding="utf-8")) or {}
+            wf = data.get("walk_forward", {})
+            return {
+                "train_days": int(wf.get("train_days", defaults["train_days"])),
+                "validate_days": int(wf.get("validate_days", defaults["validate_days"])),
+                "test_days": int(wf.get("test_days", defaults["test_days"])),
+            }
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Could not parse walk-forward config from %s: %s", self.risk_config_path, exc)
+            return defaults
+
+    def _aggregate_symbol_results(self, hypothesis: Any, results: list[EvalResult]) -> EvalResult:
+        total_trades = sum(r.total_trades for r in results)
+        if total_trades == 0:
+            return EvalResult(
+                hypothesis_id=getattr(hypothesis, "hypothesis_id", "unknown"),
+                run_id="",
+                status=HypothesisStatus.DRAFT,
+                net_pnl=0.0,
+                profit_factor=0.0,
+                win_rate=0.0,
+                avg_win=0.0,
+                avg_loss=0.0,
+                max_drawdown=0.0,
+                max_intraday_drawdown=0.0,
+                worst_day=0.0,
+                longest_losing_streak=0,
+                trades_per_day=0.0,
+                exposure_time=0.0,
+                total_trades=0,
+                slippage_sensitivity=0.0,
+                composite_score=0.0,
+            )
+
+        total_net_pnl = sum(r.net_pnl for r in results)
+        total_wins = sum(round(r.win_rate * r.total_trades) for r in results)
+        total_losses = max(0, total_trades - total_wins)
+
+        gross_wins = sum(max(0, round(r.win_rate * r.total_trades)) * r.avg_win for r in results)
+        gross_losses = sum(max(0, r.total_trades - round(r.win_rate * r.total_trades)) * abs(r.avg_loss) for r in results)
+
+        avg_win = gross_wins / total_wins if total_wins > 0 else 0.0
+        avg_loss = -(gross_losses / total_losses) if total_losses > 0 else 0.0
+        profit_factor = (gross_wins / gross_losses) if gross_losses > 0 else 999.0
+
+        weighted = lambda attr: sum(getattr(r, attr) * r.total_trades for r in results) / total_trades
+
+        return EvalResult(
+            hypothesis_id=getattr(hypothesis, "hypothesis_id", "unknown"),
+            run_id="",
+            status=HypothesisStatus.DRAFT,
+            net_pnl=round(total_net_pnl, 4),
+            profit_factor=round(profit_factor, 4),
+            win_rate=round(total_wins / total_trades, 4),
+            avg_win=round(avg_win, 4),
+            avg_loss=round(avg_loss, 4),
+            max_drawdown=round(max(r.max_drawdown for r in results), 4),
+            max_intraday_drawdown=round(max(r.max_intraday_drawdown for r in results), 4),
+            worst_day=round(min(r.worst_day for r in results), 4),
+            longest_losing_streak=max(r.longest_losing_streak for r in results),
+            trades_per_day=round(weighted("trades_per_day"), 4),
+            exposure_time=round(weighted("exposure_time"), 4),
+            total_trades=total_trades,
+            slippage_sensitivity=round(weighted("slippage_sensitivity"), 4),
+            composite_score=0.0,
+        )
