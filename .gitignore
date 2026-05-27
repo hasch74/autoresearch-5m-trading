@@ -1,3 +1,6 @@
 __pycache__/
 *.pyc
 .env
+data/raw/
+data/normalized/
+data/features/
