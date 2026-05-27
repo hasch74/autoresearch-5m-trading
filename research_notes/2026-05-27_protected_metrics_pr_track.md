@@ -35,9 +35,40 @@ Define a separate, review-focused change track for protected paths (`src/backtes
 2. PR-B: worst_day and max_intraday_drawdown correctness + tests.
 3. PR-C: evaluator drawdown gate denominator correction + tests + migration note.
 
+## Concrete file touch plan
+
+PR-A target files:
+- `src/backtester/engine.py`
+- `tests/test_backtester.py`
+
+PR-B target files:
+- `src/backtester/engine.py`
+- `tests/test_backtester.py`
+
+PR-C target files:
+- `src/evaluator/scoring.py`
+- `tests/test_runner_and_config.py` (or new evaluator-specific test file)
+
+## Reviewer checklist
+
+1. Metric definition matches policy wording (no surrogate proxy metrics).
+2. Unit tests cover both expected and adversarial edge cases.
+3. No strategy file changes mixed into protected-metrics PRs.
+4. Same input dataset reproduces before/after report diffs.
+5. Report provenance remains clean (`is_dirty: false`) for comparison runs.
+
+## Runbook for each PR
+
+1. `pytest -q`
+2. `ruff check . --select E9`
+3. `python -m compileall src strategies`
+4. `python -c "from src.agent_runner.runner import ResearchRunner; ResearchRunner().run_once()"`
+5. Archive resulting report under `reports/` and attach before/after summary in PR description.
+
 ## Acceptance criteria
 
 1. CI green including protected-path guard.
 2. No changes to strategy hypothesis files in this track.
 3. Report provenance unchanged except expected metric outputs.
 4. Metric computations traceable and documented in test assertions.
+

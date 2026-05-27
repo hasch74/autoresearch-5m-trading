@@ -3,7 +3,7 @@
 Reference reports:
 - Baseline older run: `reports/research_run_20260526_203411.json`
 - Prior full multi-hypothesis run: `reports/research_run_20260527_172751.json`
-- Latest post-timestamp-fix run: `reports/research_run_20260527_195213.json`
+- Latest clean reproducible run: `reports/research_run_20260527_220714.json`
 
 ## Executive summary
 
@@ -28,6 +28,8 @@ Reference reports:
 
 ## Refresh outcome after timestamp fix
 
-- A fresh run was completed at `2026-05-27T19:52:13.961010+00:00` using commit `b8a74b8`.
-- Key hypothesis metrics and gate outcomes remained unchanged versus the `17:27` full run.
-- This indicates the timestamp-availability correction is now modeled consistently and does not alter current strategy conclusions.
+- Clean run provenance now confirms reproducibility:
+	- `commit`: `76c6c96a9890125f9a02f2ed63503085308e1721`
+	- `is_dirty`: `false`
+- Key hypothesis metrics and gate outcomes remain unchanged versus prior full runs.
+- Conclusion remains stable: data and walk-forward infrastructure is functioning; strategy quality is still insufficient.
