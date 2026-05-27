@@ -1,0 +1,44 @@
+hypothesis_id: h_0005
+name: vwap_reversion_selective
+version: "0.1"
+
+idea: >
+  Lower-frequency VWAP reversion variant that avoids early-session noise,
+  late-session noise, and panic-volume dislocations.
+
+created_by: "agent"
+created_at: "2026-05-28"
+
+universe: "liquid_us_largecaps"
+timeframe: "5m"
+holding_period_bars: 3
+entry_type: "long"
+direction_bias: "long_only"
+risk_model: "fixed_fractional"
+
+required_features:
+  - vwap
+  - atr_14
+  - rvol_20
+  - volume_zscore_20
+  - minutes_since_open
+  - minutes_to_close
+  - ret_open_to_now
+
+family: intraday_mean_reversion
+
+parameters:
+  entry_atr_band: 1.10
+  min_rvol: 0.85
+  max_rvol: 1.20
+  max_abs_volume_zscore: 1.10
+  min_minutes_since_open: 30
+  min_minutes_to_close: 35
+  min_ret_open_to_now: -0.015
+  stop_atr_mult: 0.9
+  take_profit_atr_mult: 1.0
+  max_hold_bars: 4
+
+status: "draft"
+
+eval: {}

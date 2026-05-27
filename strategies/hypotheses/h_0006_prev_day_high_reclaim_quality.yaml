@@ -1,0 +1,43 @@
+hypothesis_id: h_0006
+name: prior_day_high_reclaim_quality
+version: "0.1"
+
+idea: >
+  Quality-filtered prior-day-high reclaim variant that avoids overextended chase entries
+  and requires moderate relative volume with positive intraday context.
+
+created_by: "agent"
+created_at: "2026-05-28"
+
+universe: "liquid_us_largecaps"
+timeframe: "5m"
+holding_period_bars: 6
+entry_type: "long"
+direction_bias: "long_only"
+risk_model: "fixed_fractional"
+
+required_features:
+  - prior_day_high
+  - atr_14
+  - rvol_20
+  - minutes_since_open
+  - session_gap_pct
+  - ret_open_to_now
+
+family: prev_day_high_low_reclaim
+
+parameters:
+  min_rvol: 0.9
+  max_rvol: 1.7
+  reclaim_buffer_atr: 0.08
+  max_extension_above_level_atr: 0.55
+  min_minutes_since_open: 25
+  min_session_gap_pct: -0.003
+  min_ret_open_to_now: 0.0
+  stop_atr_mult: 0.7
+  take_profit_atr_mult: 1.2
+  max_hold_bars: 6
+
+status: "draft"
+
+eval: {}

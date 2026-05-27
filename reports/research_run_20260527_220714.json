@@ -1,0 +1,253 @@
+{
+  "run_at": "2026-05-27T22:07:14.081150+00:00",
+  "hypotheses_evaluated": 4,
+  "provenance": {
+    "git": {
+      "commit": "76c6c96a9890125f9a02f2ed63503085308e1721",
+      "is_dirty": false
+    },
+    "configs": {
+      "risk": {
+        "path": "configs\\risk.yaml",
+        "sha256": "fd3b0a88279d82aefbef995785be8940d29e28bc8d7e9825e4f0ca5cc288d229"
+      },
+      "costs": {
+        "path": "configs\\costs.yaml",
+        "sha256": "a2f46dd3cc6b60f633553c61eb1e5b00a215e7d69ac2a968c90b5d1632f9d17c"
+      },
+      "universe": {
+        "path": "configs\\universe.yaml",
+        "sha256": "f4cc44bf0c5ab1cc9e464395fdf23b8d15513ed6f8b1d621b052a22b868fe0ca"
+      }
+    },
+    "walk_forward": {
+      "train_days": 60,
+      "validate_days": 20,
+      "test_days": 20
+    },
+    "data": {
+      "features_dir": "data\\features",
+      "symbol_count": 23,
+      "total_bars": 622609,
+      "event_time_start": "2025-01-02T14:30:00+00:00",
+      "event_time_end": "2026-05-26T19:55:00+00:00",
+      "symbol_coverage": {
+        "AAPL": {
+          "bars": 27037,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "AMZN": {
+          "bars": 27054,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "BAC": {
+          "bars": 27057,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "COST": {
+          "bars": 27059,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "CVX": {
+          "bars": 27110,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "GOOGL": {
+          "bars": 27032,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "GS": {
+          "bars": 27055,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "HD": {
+          "bars": 27055,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "IWM": {
+          "bars": 27056,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "JNJ": {
+          "bars": 27109,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "JPM": {
+          "bars": 27106,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "LLY": {
+          "bars": 27057,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "META": {
+          "bars": 27058,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "MSFT": {
+          "bars": 27112,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "NVDA": {
+          "bars": 27056,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "PFE": {
+          "bars": 27106,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "QQQ": {
+          "bars": 27113,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "SPY": {
+          "bars": 27055,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "TSLA": {
+          "bars": 27052,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "UNH": {
+          "bars": 27054,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "V": {
+          "bars": 27106,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "WMT": {
+          "bars": 27053,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "XOM": {
+          "bars": 27057,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        }
+      }
+    }
+  },
+  "results": {
+    "h_0001": {
+      "hypothesis_id": "h_0001",
+      "n_trades": 488,
+      "net_pnl": -1128.675,
+      "composite_score": 0.3202,
+      "gate_passed": false,
+      "failed_gates": [
+        "min_win_rate: 0.389 < 0.4",
+        "min_profit_factor: 0.626 < 1.1",
+        "min_net_pnl: -1128.675 < 0.0",
+        "min_trades_per_day: 0.069 < 0.5",
+        "walk_forward_positive_fold_ratio: 0.037 < 0.600",
+        "walk_forward_median_oos_net_pnl: -2.030 <= 0.000"
+      ],
+      "walk_forward": {
+        "folds": 299,
+        "positive_folds": 11,
+        "positive_fold_ratio": 0.0368,
+        "median_oos_net_pnl": -2.0295,
+        "min_positive_fold_ratio": 0.6,
+        "min_median_oos_net_pnl": 0.0,
+        "passed": false
+      },
+      "recommended_status": "quarantined"
+    },
+    "h_0002": {
+      "hypothesis_id": "h_0002",
+      "n_trades": 513,
+      "net_pnl": -839.7106,
+      "composite_score": 0.3322,
+      "gate_passed": false,
+      "failed_gates": [
+        "min_net_pnl: -839.711 < 0.0",
+        "slippage_sensitivity: 2.463 > 1.0",
+        "min_trades_per_day: 0.093 < 0.5",
+        "walk_forward_positive_fold_ratio: 0.033 < 0.600",
+        "walk_forward_median_oos_net_pnl: 0.000 <= 0.000"
+      ],
+      "walk_forward": {
+        "folds": 299,
+        "positive_folds": 10,
+        "positive_fold_ratio": 0.0334,
+        "median_oos_net_pnl": 0.0,
+        "min_positive_fold_ratio": 0.6,
+        "min_median_oos_net_pnl": 0.0,
+        "passed": false
+      },
+      "recommended_status": "quarantined"
+    },
+    "h_0003": {
+      "hypothesis_id": "h_0003",
+      "n_trades": 63935,
+      "net_pnl": -146458.5655,
+      "composite_score": 0.3459,
+      "gate_passed": false,
+      "failed_gates": [
+        "min_win_rate: 0.309 < 0.4",
+        "min_profit_factor: 0.457 < 1.1",
+        "min_net_pnl: -146458.565 < 0.0",
+        "walk_forward_positive_fold_ratio: 0.000 < 0.600",
+        "walk_forward_median_oos_net_pnl: -357.332 <= 0.000"
+      ],
+      "walk_forward": {
+        "folds": 299,
+        "positive_folds": 0,
+        "positive_fold_ratio": 0.0,
+        "median_oos_net_pnl": -357.3323,
+        "min_positive_fold_ratio": 0.6,
+        "min_median_oos_net_pnl": 0.0,
+        "passed": false
+      },
+      "recommended_status": "quarantined"
+    },
+    "h_0004": {
+      "hypothesis_id": "h_0004",
+      "n_trades": 2377,
+      "net_pnl": -5437.8194,
+      "composite_score": 0.2482,
+      "gate_passed": false,
+      "failed_gates": [
+        "min_win_rate: 0.241 < 0.4",
+        "min_profit_factor: 0.501 < 1.1",
+        "min_net_pnl: -5437.819 < 0.0",
+        "min_trades_per_day: 0.303 < 0.5",
+        "walk_forward_positive_fold_ratio: 0.010 < 0.600",
+        "walk_forward_median_oos_net_pnl: -12.462 <= 0.000"
+      ],
+      "walk_forward": {
+        "folds": 299,
+        "positive_folds": 3,
+        "positive_fold_ratio": 0.01,
+        "median_oos_net_pnl": -12.4624,
+        "min_positive_fold_ratio": 0.6,
+        "min_median_oos_net_pnl": 0.0,
+        "passed": false
+      },
+      "recommended_status": "quarantined"
+    }
+  }
+}

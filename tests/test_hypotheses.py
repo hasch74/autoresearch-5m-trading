@@ -4,6 +4,8 @@ from strategies.hypotheses.h_0001_vwap_pullback import VwapPullbackRvol
 from strategies.hypotheses.h_0002_opening_range_breakout import OpeningRangeBreakout
 from strategies.hypotheses.h_0003_vwap_reversion import VwapReversionBaseline
 from strategies.hypotheses.h_0004_prev_day_high_reclaim import PriorDayHighReclaimBaseline
+from strategies.hypotheses.h_0005_vwap_reversion_selective import VwapReversionSelective
+from strategies.hypotheses.h_0006_prev_day_high_reclaim_quality import PriorDayHighReclaimQuality
 from src.types import Bar
 
 
@@ -170,6 +172,94 @@ def test_prior_day_high_reclaim_baseline_requires_true_reclaim() -> None:
         "atr_14": 1.0,
         "rvol_20": 1.2,
         "minutes_since_open": 20,
+    }
+
+    assert hyp.generate_signals(bars, features) == []
+
+
+def test_vwap_reversion_selective_requires_clean_context() -> None:
+    hyp = VwapReversionSelective()
+
+    bar = _bar_at(datetime(2026, 1, 2, 18, 0, tzinfo=timezone.utc), 98.6)
+    features = {
+        "vwap": 100.0,
+        "atr_14": 1.0,
+        "rvol_20": 1.0,
+        "volume_zscore_20": 0.3,
+        "minutes_since_open": 60,
+        "minutes_to_close": 90,
+        "ret_open_to_now": -0.005,
+    }
+
+    signals = hyp.generate_signals([bar], features)
+    assert len(signals) == 1
+    assert signals[0].hypothesis_id == "h_0005"
+
+
+def test_vwap_reversion_selective_blocks_early_or_extreme_volume() -> None:
+    hyp = VwapReversionSelective()
+    bar = _bar_at(datetime(2026, 1, 2, 15, 0, tzinfo=timezone.utc), 98.6)
+
+    early = {
+        "vwap": 100.0,
+        "atr_14": 1.0,
+        "rvol_20": 1.0,
+        "volume_zscore_20": 0.3,
+        "minutes_since_open": 10,
+        "minutes_to_close": 120,
+        "ret_open_to_now": -0.005,
+    }
+    extreme = {
+        "vwap": 100.0,
+        "atr_14": 1.0,
+        "rvol_20": 1.0,
+        "volume_zscore_20": 2.0,
+        "minutes_since_open": 60,
+        "minutes_to_close": 120,
+        "ret_open_to_now": -0.005,
+    }
+
+    assert hyp.generate_signals([bar], early) == []
+    assert hyp.generate_signals([bar], extreme) == []
+
+
+def test_prior_day_high_reclaim_quality_triggers_when_not_overextended() -> None:
+    hyp = PriorDayHighReclaimQuality()
+
+    start = datetime(2026, 1, 2, 15, 0, tzinfo=timezone.utc)
+    bars = [
+        _bar_at(start, 99.9),
+        _bar_at(start + timedelta(minutes=5), 100.2),
+    ]
+    features = {
+        "prior_day_high": 100.0,
+        "atr_14": 1.0,
+        "rvol_20": 1.2,
+        "minutes_since_open": 35,
+        "session_gap_pct": 0.001,
+        "ret_open_to_now": 0.002,
+    }
+
+    signals = hyp.generate_signals(bars, features)
+    assert len(signals) == 1
+    assert signals[0].hypothesis_id == "h_0006"
+
+
+def test_prior_day_high_reclaim_quality_blocks_overextended_reclaim() -> None:
+    hyp = PriorDayHighReclaimQuality()
+
+    start = datetime(2026, 1, 2, 15, 0, tzinfo=timezone.utc)
+    bars = [
+        _bar_at(start, 99.9),
+        _bar_at(start + timedelta(minutes=5), 101.0),
+    ]
+    features = {
+        "prior_day_high": 100.0,
+        "atr_14": 1.0,
+        "rvol_20": 1.2,
+        "minutes_since_open": 35,
+        "session_gap_pct": 0.001,
+        "ret_open_to_now": 0.002,
     }
 
     assert hyp.generate_signals(bars, features) == []
