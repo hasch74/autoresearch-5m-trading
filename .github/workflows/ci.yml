@@ -5,7 +5,44 @@ on:
   pull_request:
 
 jobs:
+  protected-path-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Block protected path changes
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
+            echo "Non-PR event; guard skipped."
+            exit 0
+          fi
+
+          git fetch origin "${{ github.base_ref }}" --depth=1
+          changed_files="$(git diff --name-only "origin/${{ github.base_ref }}"...HEAD)"
+
+          echo "Changed files:"
+          echo "$changed_files"
+
+          protected_regex='^(src/evaluator/|src/backtester/|src/risk/|src/broker_ibkr/|configs/costs\.yaml$|configs/risk\.yaml$)'
+          violating="$(echo "$changed_files" | grep -E "$protected_regex" || true)"
+
+          if [[ -n "$violating" ]]; then
+            echo "::error::Protected paths changed in this PR."
+            echo "The following protected paths were modified:"
+            echo "$violating"
+            exit 1
+          fi
+
+          echo "No protected path changes detected."
+
   test:
+    needs: protected-path-guard
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
