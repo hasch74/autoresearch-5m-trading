@@ -17,8 +17,10 @@ This runner is in the agent's allow_write list for reports/ only.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -37,6 +39,8 @@ logger = logging.getLogger(__name__)
 _REPORTS_DIR = Path("reports")
 _FEATURES_DIR = Path("data/features")
 _RISK_CONFIG_PATH = Path("configs/risk.yaml")
+_COSTS_CONFIG_PATH = Path("configs/costs.yaml")
+_UNIVERSE_CONFIG_PATH = Path("configs/universe.yaml")
 
 
 class ResearchRunner:
@@ -70,6 +74,7 @@ class ResearchRunner:
         Returns a summary dict describing outcomes for all evaluated hypotheses.
         """
         self.reports_dir.mkdir(parents=True, exist_ok=True)
+        run_at = datetime.now(timezone.utc)
 
         registry = load_all(self.hypotheses_dir)
         if not registry:
@@ -82,6 +87,7 @@ class ResearchRunner:
             logger.warning("No feature data found in %s; run data_ingest first", self.features_dir)
             return {"hypotheses_evaluated": 0, "warning": "no_feature_data"}
 
+        wf_config = self._load_walk_forward_config()
         results = {}
         for hyp_id, hyp in registry.items():
             logger.info("Evaluating %s ...", hyp_id)
@@ -100,7 +106,7 @@ class ResearchRunner:
                 raw_result = self._aggregate_symbol_results(hyp, symbol_results)
                 scored_result = score(raw_result)
                 gate = check_gates(scored_result)
-                wf_summary = self._run_walk_forward(feature_frames, hyp)
+                wf_summary = self._run_walk_forward(feature_frames, hyp, wf_config)
 
                 failed_gates = list(gate.failed_gates)
                 if not wf_summary["passed"]:
@@ -145,11 +151,12 @@ class ResearchRunner:
                 results[hyp_id] = {"hypothesis_id": hyp_id, "error": str(exc)}
 
         report = {
-            "run_at": datetime.now(timezone.utc).isoformat(),
+            "run_at": run_at.isoformat(),
             "hypotheses_evaluated": len(results),
+            "provenance": self._build_provenance(feature_frames, wf_config),
             "results": results,
         }
-        self._save_report(report)
+        self._save_report(report, run_at)
         return report
 
     # ------------------------------------------------------------------
@@ -166,14 +173,19 @@ class ResearchRunner:
                 logger.warning("Could not load features for %s: %s", symbol, exc)
         return frames
 
-    def _save_report(self, report: dict) -> None:
-        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    def _save_report(self, report: dict, run_at: datetime | None = None) -> None:
+        ts = (run_at or datetime.now(timezone.utc)).strftime("%Y%m%d_%H%M%S")
         path = self.reports_dir / f"research_run_{ts}.json"
         path.write_text(json.dumps(report, indent=2, default=str))
         logger.info("Report saved to %s", path)
 
-    def _run_walk_forward(self, feature_frames: dict[str, pd.DataFrame], hypothesis: Any) -> dict[str, Any]:
-        config = self._load_walk_forward_config()
+    def _run_walk_forward(
+        self,
+        feature_frames: dict[str, pd.DataFrame],
+        hypothesis: Any,
+        config: dict[str, int] | None = None,
+    ) -> dict[str, Any]:
+        config = config or self._load_walk_forward_config()
         min_positive_fold_ratio = 0.60
         min_median_oos_net_pnl = 0.0
 
@@ -243,6 +255,97 @@ class ResearchRunner:
         except Exception as exc:  # noqa: BLE001
             logger.warning("Could not parse walk-forward config from %s: %s", self.risk_config_path, exc)
             return defaults
+
+    def _build_provenance(
+        self,
+        feature_frames: dict[str, pd.DataFrame],
+        wf_config: dict[str, int],
+    ) -> dict[str, Any]:
+        data_summary = self._summarize_feature_coverage(feature_frames)
+        return {
+            "git": {
+                "commit": self._git_commit_hash(),
+                "is_dirty": self._git_is_dirty(),
+            },
+            "configs": {
+                "risk": self._config_descriptor(self.risk_config_path),
+                "costs": self._config_descriptor(_COSTS_CONFIG_PATH),
+                "universe": self._config_descriptor(_UNIVERSE_CONFIG_PATH),
+            },
+            "walk_forward": wf_config,
+            "data": {
+                "features_dir": str(self.features_dir),
+                **data_summary,
+            },
+        }
+
+    def _summarize_feature_coverage(self, feature_frames: dict[str, pd.DataFrame]) -> dict[str, Any]:
+        coverage: dict[str, Any] = {}
+        total_bars = 0
+        starts: list[pd.Timestamp] = []
+        ends: list[pd.Timestamp] = []
+
+        for symbol, frame in sorted(feature_frames.items()):
+            bars = int(len(frame))
+            total_bars += bars
+            start_iso, end_iso, start_ts, end_ts = self._event_time_bounds(frame)
+            if start_ts is not None:
+                starts.append(start_ts)
+            if end_ts is not None:
+                ends.append(end_ts)
+            coverage[symbol] = {
+                "bars": bars,
+                "event_time_start": start_iso,
+                "event_time_end": end_iso,
+            }
+
+        return {
+            "symbol_count": len(coverage),
+            "total_bars": total_bars,
+            "event_time_start": min(starts).isoformat() if starts else None,
+            "event_time_end": max(ends).isoformat() if ends else None,
+            "symbol_coverage": coverage,
+        }
+
+    def _event_time_bounds(
+        self,
+        frame: pd.DataFrame,
+    ) -> tuple[str | None, str | None, pd.Timestamp | None, pd.Timestamp | None]:
+        if "event_time" not in frame.columns or frame.empty:
+            return None, None, None, None
+
+        times = pd.to_datetime(frame["event_time"], utc=True, errors="coerce").dropna()
+        if times.empty:
+            return None, None, None, None
+
+        start_ts = times.min()
+        end_ts = times.max()
+        return start_ts.isoformat(), end_ts.isoformat(), start_ts, end_ts
+
+    def _config_descriptor(self, path: Path) -> dict[str, str | None]:
+        return {
+            "path": str(path),
+            "sha256": self._file_sha256(path),
+        }
+
+    def _file_sha256(self, path: Path) -> str | None:
+        if not path.exists():
+            return None
+        return hashlib.sha256(path.read_bytes()).hexdigest()
+
+    def _git_commit_hash(self) -> str:
+        try:
+            out = subprocess.check_output(["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL, text=True)
+            return out.strip()
+        except Exception:  # noqa: BLE001
+            return "unknown"
+
+    def _git_is_dirty(self) -> bool:
+        try:
+            out = subprocess.check_output(["git", "status", "--porcelain"], stderr=subprocess.DEVNULL, text=True)
+            return bool(out.strip())
+        except Exception:  # noqa: BLE001
+            return False
 
     def _aggregate_symbol_results(self, hypothesis: Any, results: list[EvalResult]) -> EvalResult:
         total_trades = sum(r.total_trades for r in results)

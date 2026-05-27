@@ -84,6 +84,13 @@ def test_runner_backtests_each_symbol_separately(tmp_path: Path, monkeypatch) ->
     report = ResearchRunner(features_dir=features_dir, reports_dir=reports_dir).run_once()
 
     assert report["hypotheses_evaluated"] == 1
+    assert "provenance" in report
+    assert report["provenance"]["walk_forward"] == {"train_days": 60, "validate_days": 20, "test_days": 20}
+    assert report["provenance"]["data"]["symbol_count"] == 2
+    assert report["provenance"]["data"]["total_bars"] == 2
+    assert set(report["provenance"]["data"]["symbol_coverage"]) == {"SPY", "QQQ"}
+    assert len(report["provenance"]["configs"]["risk"]["sha256"] or "") == 64
+    assert len(report["provenance"]["git"]["commit"]) == 40
     result = report["results"]["h_dummy"]
     assert result["n_trades"] == 5
     assert result["net_pnl"] == 4.0
