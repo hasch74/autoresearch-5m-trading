@@ -2,6 +2,8 @@ from datetime import datetime, timedelta, timezone
 
 from strategies.hypotheses.h_0001_vwap_pullback import VwapPullbackRvol
 from strategies.hypotheses.h_0002_opening_range_breakout import OpeningRangeBreakout
+from strategies.hypotheses.h_0003_vwap_reversion import VwapReversionBaseline
+from strategies.hypotheses.h_0004_prev_day_high_reclaim import PriorDayHighReclaimBaseline
 from src.types import Bar
 
 
@@ -94,3 +96,80 @@ def test_opening_range_breakout_translates_or_levels_to_atr_distances() -> None:
 
     assert sig.stop_distance_atr == expected_stop_atr
     assert sig.take_profit_distance_atr == expected_tp_atr
+
+
+def test_vwap_reversion_baseline_triggers_on_large_discount_to_vwap() -> None:
+    hyp = VwapReversionBaseline()
+
+    bar = _bar_at(datetime(2026, 1, 2, 19, 0, tzinfo=timezone.utc), 98.8)
+    features = {
+        "vwap": 100.0,
+        "atr_14": 1.0,
+        "rvol_20": 1.1,
+        "minutes_to_close": 45,
+    }
+
+    signals = hyp.generate_signals([bar], features)
+    assert len(signals) == 1
+    assert signals[0].hypothesis_id == "h_0003"
+
+
+def test_vwap_reversion_baseline_skips_late_day_or_high_rvol() -> None:
+    hyp = VwapReversionBaseline()
+
+    bar = _bar_at(datetime(2026, 1, 2, 20, 45, tzinfo=timezone.utc), 98.8)
+    late_features = {
+        "vwap": 100.0,
+        "atr_14": 1.0,
+        "rvol_20": 1.1,
+        "minutes_to_close": 10,
+    }
+    crowded_features = {
+        "vwap": 100.0,
+        "atr_14": 1.0,
+        "rvol_20": 1.6,
+        "minutes_to_close": 45,
+    }
+
+    assert hyp.generate_signals([bar], late_features) == []
+    assert hyp.generate_signals([bar], crowded_features) == []
+
+
+def test_prior_day_high_reclaim_baseline_triggers_after_reclaim() -> None:
+    hyp = PriorDayHighReclaimBaseline()
+
+    start = datetime(2026, 1, 2, 14, 45, tzinfo=timezone.utc)
+    bars = [
+        _bar_at(start, 99.8),
+        _bar_at(start + timedelta(minutes=5), 100.3),
+    ]
+
+    features = {
+        "prior_day_high": 100.0,
+        "atr_14": 1.0,
+        "rvol_20": 1.2,
+        "minutes_since_open": 20,
+    }
+
+    signals = hyp.generate_signals(bars, features)
+    assert len(signals) == 1
+    assert signals[0].hypothesis_id == "h_0004"
+
+
+def test_prior_day_high_reclaim_baseline_requires_true_reclaim() -> None:
+    hyp = PriorDayHighReclaimBaseline()
+
+    start = datetime(2026, 1, 2, 14, 45, tzinfo=timezone.utc)
+    bars = [
+        _bar_at(start, 100.1),
+        _bar_at(start + timedelta(minutes=5), 100.3),
+    ]
+
+    features = {
+        "prior_day_high": 100.0,
+        "atr_14": 1.0,
+        "rvol_20": 1.2,
+        "minutes_since_open": 20,
+    }
+
+    assert hyp.generate_signals(bars, features) == []

@@ -130,6 +130,8 @@ class PaperTrader:
                         entry_time=bar.event_time,
                         hypothesis_id=hyp_id,
                     )
+                    break  # one signal per hypothesis
+                if bar.symbol in self._positions:
                     break  # one position per symbol
 
         if new_fills:

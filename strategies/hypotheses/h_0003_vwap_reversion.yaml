@@ -1,0 +1,37 @@
+hypothesis_id: h_0003
+name: vwap_reversion_baseline
+version: "0.1"
+
+idea: >
+  Baseline mean-reversion comparator: if price stretches materially below session VWAP
+  without exceptional relative volume, enter long for a short reversion back toward VWAP.
+
+created_by: "agent"
+created_at: "2026-05-27"
+
+universe: "liquid_us_largecaps"
+timeframe: "5m"
+holding_period_bars: 6
+entry_type: "long"
+direction_bias: "long_only"
+risk_model: "fixed_fractional"
+
+required_features:
+  - vwap
+  - atr_14
+  - rvol_20
+  - minutes_to_close
+
+family: intraday_mean_reversion
+
+parameters:
+  entry_atr_band: 0.75
+  max_rvol: 1.25
+  stop_atr_mult: 1.0
+  take_profit_atr_mult: 1.25
+  max_hold_bars: 6
+  min_minutes_to_close: 20
+
+status: "draft"
+
+eval: {}
