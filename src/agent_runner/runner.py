@@ -18,11 +18,12 @@ This runner is in the agent's allow_write list for reports/ only.
 from __future__ import annotations
 
 import argparse
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, TimeoutError, as_completed
 import hashlib
 import importlib
 import json
 import logging
+import multiprocessing as mp
 import os
 import subprocess
 import sys
@@ -47,6 +48,7 @@ _FEATURES_DIR = Path("data/features")
 _RISK_CONFIG_PATH = Path("configs/risk.yaml")
 _COSTS_CONFIG_PATH = Path("configs/costs.yaml")
 _UNIVERSE_CONFIG_PATH = Path("configs/universe.yaml")
+_DEFAULT_PHASE_TIMEOUT_SECONDS = 900
 
 
 def _instantiate_hypothesis(module_name: str, class_name: str) -> Any:
@@ -155,6 +157,12 @@ class ResearchRunner:
             self.workers = max(1, int(env_workers)) if env_workers else 1
         else:
             self.workers = max(1, int(workers))
+
+        env_timeout = os.getenv("AUTORESEARCH_PHASE_TIMEOUT_SECONDS")
+        self.phase_timeout_seconds = (
+            max(60, int(env_timeout)) if env_timeout else _DEFAULT_PHASE_TIMEOUT_SECONDS
+        )
+        self._mp_context = mp.get_context("spawn")
 
     def run_once(self) -> dict[str, Any]:
         """Execute one research cycle.
@@ -330,26 +338,32 @@ class ResearchRunner:
         config = config or self._load_walk_forward_config()
         min_positive_fold_ratio = 0.60
         min_median_oos_net_pnl = 0.0
+        hyp_id = getattr(hypothesis, "hypothesis_id", "unknown")
 
         net_pnls: list[float] = []
+        symbols = sorted(feature_frames)
+        pending_symbols = set(symbols)
 
         use_parallel = self.workers > 1 and len(feature_frames) > 1
         if use_parallel:
+            ex: ProcessPoolExecutor | None = None
             try:
-                with ProcessPoolExecutor(max_workers=self.workers) as ex:
-                    futures = {
-                        ex.submit(
-                            _run_symbol_walk_forward_task,
-                            symbol,
-                            feature_paths[symbol],
-                            module_name or hypothesis.__class__.__module__,
-                            class_name or hypothesis.__class__.__name__,
-                            config,
-                        ): symbol
-                        for symbol in sorted(feature_frames)
-                    }
-                    for fut in as_completed(futures):
+                ex = ProcessPoolExecutor(max_workers=self.workers, mp_context=self._mp_context)
+                futures = {
+                    ex.submit(
+                        _run_symbol_walk_forward_task,
+                        symbol,
+                        feature_paths[symbol],
+                        module_name or hypothesis.__class__.__module__,
+                        class_name or hypothesis.__class__.__name__,
+                        config,
+                    ): symbol
+                    for symbol in symbols
+                }
+                try:
+                    for fut in as_completed(futures, timeout=self.phase_timeout_seconds):
                         symbol = futures[fut]
+                        pending_symbols.discard(symbol)
                         task_symbol, symbol_net_pnls, error = fut.result()
                         if error:
                             logger.warning("Walk-forward task failed for %s: %s", symbol, error)
@@ -357,12 +371,31 @@ class ResearchRunner:
                         if task_symbol != symbol:
                             logger.warning("Walk-forward task symbol mismatch: expected %s got %s", symbol, task_symbol)
                         net_pnls.extend(symbol_net_pnls)
+                except TimeoutError:
+                    logger.error(
+                        "Walk-forward timeout for %s after %ss; pending symbols: %s",
+                        hyp_id,
+                        self.phase_timeout_seconds,
+                        ",".join(sorted(pending_symbols)),
+                    )
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Parallel walk-forward failed; falling back to sequential mode: %s", exc)
                 use_parallel = False
+                pending_symbols = set(symbols)
+            finally:
+                if ex is not None:
+                    ex.shutdown(wait=False, cancel_futures=True)
 
-        if not use_parallel:
-            for _symbol, symbol_df in sorted(feature_frames.items()):
+        sequential_symbols = symbols if not use_parallel else sorted(pending_symbols)
+        if sequential_symbols:
+            if use_parallel and pending_symbols:
+                logger.info(
+                    "Walk-forward fallback for %s on pending symbols: %s",
+                    hyp_id,
+                    ",".join(sequential_symbols),
+                )
+            for symbol in sequential_symbols:
+                symbol_df = feature_frames[symbol]
                 if symbol_df.empty:
                     continue
                 for _train_df, _val_df, test_df in walk_forward_splits(
@@ -422,25 +455,31 @@ class ResearchRunner:
         symbol_results: list[EvalResult] = []
         symbol_timing: dict[str, float] = {}
         full_backtest_seconds = 0.0
+        hyp_id = getattr(hypothesis, "hypothesis_id", "unknown")
+        symbols = sorted(feature_frames)
+        pending_symbols = set(symbols)
 
         use_parallel = self.workers > 1 and len(feature_frames) > 1
         if use_parallel:
+            ex: ProcessPoolExecutor | None = None
             try:
-                with ProcessPoolExecutor(max_workers=self.workers) as ex:
-                    futures = {}
-                    for symbol in sorted(feature_frames):
-                        symbol_start = time.perf_counter()
-                        fut = ex.submit(
-                            _run_symbol_backtest_task,
-                            symbol,
-                            feature_paths[symbol],
-                            module_name,
-                            class_name,
-                        )
-                        futures[fut] = (symbol, symbol_start)
+                ex = ProcessPoolExecutor(max_workers=self.workers, mp_context=self._mp_context)
+                futures = {}
+                for symbol in symbols:
+                    symbol_start = time.perf_counter()
+                    fut = ex.submit(
+                        _run_symbol_backtest_task,
+                        symbol,
+                        feature_paths[symbol],
+                        module_name,
+                        class_name,
+                    )
+                    futures[fut] = (symbol, symbol_start)
 
-                    for fut in as_completed(futures):
+                try:
+                    for fut in as_completed(futures, timeout=self.phase_timeout_seconds):
                         symbol, symbol_start = futures[fut]
+                        pending_symbols.discard(symbol)
                         elapsed = time.perf_counter() - symbol_start
                         symbol_timing[symbol] = round(elapsed, 4)
                         full_backtest_seconds += elapsed
@@ -453,12 +492,31 @@ class ResearchRunner:
                             logger.warning("Backtest task symbol mismatch: expected %s got %s", symbol, task_symbol)
                         if result is not None:
                             symbol_results.append(result)
-
-                return symbol_results, symbol_timing, full_backtest_seconds
+                except TimeoutError:
+                    logger.error(
+                        "Full-backtest timeout for %s after %ss; pending symbols: %s",
+                        hyp_id,
+                        self.phase_timeout_seconds,
+                        ",".join(sorted(pending_symbols)),
+                    )
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Parallel full backtest failed; falling back to sequential mode: %s", exc)
+                use_parallel = False
+                pending_symbols = set(symbols)
+            finally:
+                if ex is not None:
+                    ex.shutdown(wait=False, cancel_futures=True)
 
-        for symbol, symbol_df in sorted(feature_frames.items()):
+        sequential_symbols = symbols if not use_parallel else sorted(pending_symbols)
+        if use_parallel and pending_symbols:
+            logger.info(
+                "Full-backtest fallback for %s on pending symbols: %s",
+                hyp_id,
+                ",".join(sequential_symbols),
+            )
+
+        for symbol in sequential_symbols:
+            symbol_df = feature_frames[symbol]
             symbol_start = time.perf_counter()
             if symbol_df.empty:
                 symbol_timing[symbol] = round(time.perf_counter() - symbol_start, 4)
