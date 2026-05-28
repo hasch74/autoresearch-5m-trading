@@ -105,12 +105,14 @@ def run_backtest(
     closed_trades: list[dict] = []
 
     eastern_series = df["event_time"].dt.tz_convert("America/New_York")
-    session_end_hour = 16
-
-    for i, row in df.iterrows():
+    for i, row in enumerate(df.itertuples(index=False), start=0):
         bar = _row_to_bar(row)
         bars_list.append(bar)
-        features = {col: row[col] for col in feature_cols if pd.notna(row[col])}
+        features = {
+            col: value
+            for col in feature_cols
+            if pd.notna(value := getattr(row, col))
+        }
 
         is_last_bar_of_session = _is_session_last_bar(
             eastern_series.iloc[i], df, eastern_series, i
@@ -169,16 +171,16 @@ def run_backtest(
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-def _row_to_bar(row: pd.Series) -> Bar:
+def _row_to_bar(row: object) -> Bar:
     return Bar(
-        event_time=row["event_time"],
-        available_time=row.get("available_time", row["event_time"]),
-        symbol=row["symbol"],
-        open=float(row["open"]),
-        high=float(row["high"]),
-        low=float(row["low"]),
-        close=float(row["close"]),
-        volume=int(row["volume"]),
+        event_time=row.event_time,
+        available_time=getattr(row, "available_time", row.event_time),
+        symbol=row.symbol,
+        open=float(row.open),
+        high=float(row.high),
+        low=float(row.low),
+        close=float(row.close),
+        volume=int(row.volume),
     )
 
 
