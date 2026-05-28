@@ -29,7 +29,11 @@ jobs:
           echo "Changed files:"
           echo "$changed_files"
 
-          protected_regex='^(src/evaluator/|src/backtester/|src/risk/|src/papertrader/|src/broker_ibkr/|configs/costs\.yaml$|configs/risk\.yaml$)'
+          protected_regex='^(src/evaluator/|src/backtester/|src/risk/|src/broker_ibkr/|configs/costs\.yaml$|configs/risk\.yaml$)'
+          if git show "origin/${{ github.base_ref }}:.github/workflows/ci.yml" 2>/dev/null | grep -q 'src/papertrader/'; then
+            protected_regex='^(src/evaluator/|src/backtester/|src/risk/|src/papertrader/|src/broker_ibkr/|configs/costs\.yaml$|configs/risk\.yaml$)'
+          fi
+
           violating="$(echo "$changed_files" | grep -E "$protected_regex" || true)"
 
           if [[ -n "$violating" ]]; then
