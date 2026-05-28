@@ -69,6 +69,29 @@ class _FlatHoldHypothesis:
         return []
 
 
+class _NextOpenExitHypothesis:
+    hypothesis_id = "h_next_open_exit"
+
+    def generate_signals(self, bars, features):
+        if len(bars) == 1:
+            return [
+                Signal(
+                    hypothesis_id=self.hypothesis_id,
+                    symbol=bars[-1].symbol,
+                    bar_time=bars[-1].event_time,
+                    direction=Direction.LONG,
+                    confidence=0.8,
+                    stop_distance_atr=100.0,
+                    take_profit_distance_atr=100.0,
+                    max_hold_bars=10,
+                )
+            ]
+        return []
+
+    def should_exit_position(self, bars, features):
+        return bool(features.get("exit_now", False))
+
+
 def _build_df(second_high: float, second_low: float) -> pd.DataFrame:
     t0 = datetime(2026, 1, 2, 14, 30, tzinfo=timezone.utc)
     t1 = t0 + timedelta(minutes=5)
@@ -156,3 +179,63 @@ def test_backtester_aggregates_worst_day_and_intraday_drawdown_by_session() -> N
     assert result.total_trades == 3
     assert result.worst_day == -4.32
     assert result.max_intraday_drawdown == 4.32
+
+
+def test_backtester_honors_strategy_next_open_exit() -> None:
+    start = datetime(2026, 1, 2, 14, 30, tzinfo=timezone.utc)
+    rows = [
+        {
+            "event_time": start,
+            "available_time": start + timedelta(seconds=5),
+            "symbol": "SPY",
+            "open": 100.0,
+            "high": 100.5,
+            "low": 99.5,
+            "close": 100.0,
+            "volume": 1000,
+            "atr_14": 1.0,
+            "exit_now": False,
+        },
+        {
+            "event_time": start + timedelta(minutes=5),
+            "available_time": start + timedelta(minutes=5, seconds=5),
+            "symbol": "SPY",
+            "open": 100.1,
+            "high": 103.0,
+            "low": 100.0,
+            "close": 102.0,
+            "volume": 1000,
+            "atr_14": 1.0,
+            "exit_now": False,
+        },
+        {
+            "event_time": start + timedelta(minutes=10),
+            "available_time": start + timedelta(minutes=10, seconds=5),
+            "symbol": "SPY",
+            "open": 101.0,
+            "high": 101.5,
+            "low": 88.0,
+            "close": 90.0,
+            "volume": 1000,
+            "atr_14": 1.0,
+            "exit_now": True,
+        },
+        {
+            "event_time": start + timedelta(minutes=15),
+            "available_time": start + timedelta(minutes=15, seconds=5),
+            "symbol": "SPY",
+            "open": 110.0,
+            "high": 111.0,
+            "low": 79.0,
+            "close": 80.0,
+            "volume": 1000,
+            "atr_14": 1.0,
+            "exit_now": False,
+        },
+    ]
+    df = pd.DataFrame(rows)
+
+    result = run_backtest(df, _NextOpenExitHypothesis())
+
+    assert result.total_trades == 1
+    assert result.net_pnl > 0.0

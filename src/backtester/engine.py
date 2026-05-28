@@ -3,6 +3,9 @@
 Design:
 - Bar-by-bar replay of a feature DataFrame (output of feature_store.compute_features).
 - For each bar: call hypothesis.generate_signals(); for each open position: check exit.
+- Optional strategy-driven exit hook: if hypothesis implements
+    should_exit_position(bars, features) and returns True at bar close,
+    position is closed on the next bar open.
 - Fill model based on costs.yaml: commission (per-share), spread (bps), slippage (ATR fraction).
 - Returns EvalResult with all required metrics.
 
@@ -47,6 +50,7 @@ class _OpenTrade:
     tp_price: float
     max_hold_bars: int
     shares: int = 1   # simplified: 1 share per signal for metrics; PnL is per-share
+    strategy_exit_next_open: bool = False
 
 
 def run_backtest(
@@ -121,6 +125,20 @@ def run_backtest(
 
         # --- Check exit for open trade ---
         if open_trade is not None:
+            if open_trade.strategy_exit_next_open:
+                exit_execution_cost = _exit_execution_cost(bar.open, current_atr, cost_model)
+                exit_price = _exit_fill(bar.open, open_trade.direction, current_atr, cost_model)
+                pnl = _pnl(open_trade.entry_price, exit_price, open_trade.direction, open_trade.shares)
+                closed_trades.append({
+                    "exit_reason": "strategy_next_open",
+                    "pnl": pnl,
+                    "execution_cost": (open_trade.entry_execution_cost + exit_execution_cost) * open_trade.shares,
+                    "bars_held": i - open_trade.entry_bar_idx,
+                    "exit_time": bar.event_time,
+                })
+                open_trade = None
+
+        if open_trade is not None:
             bars_held = i - open_trade.entry_bar_idx
             trade_result = _check_exit(
                 open_trade,
@@ -133,6 +151,11 @@ def run_backtest(
             if trade_result is not None:
                 closed_trades.append(trade_result)
                 open_trade = None
+
+        # Strategy-managed exit: evaluate at close, execute on next bar open.
+        if open_trade is not None and not is_last_bar_of_session:
+            if _strategy_requests_next_open_exit(hypothesis, bars_list, features):
+                open_trade.strategy_exit_next_open = True
 
         # --- Check entry (only if no open position) ---
         if open_trade is None and not is_last_bar_of_session:
@@ -295,6 +318,18 @@ def _check_exit(
         }
 
     return None
+
+
+def _strategy_requests_next_open_exit(
+    hypothesis: object,
+    bars: Sequence[Bar],
+    features: dict,
+) -> bool:
+    """Return True if hypothesis requests an exit on the next bar open."""
+    if not hasattr(hypothesis, "should_exit_position"):
+        return False
+    should_exit = getattr(hypothesis, "should_exit_position")
+    return bool(should_exit(bars, features))
 
 
 def _empty_eval(hypothesis: object) -> EvalResult:

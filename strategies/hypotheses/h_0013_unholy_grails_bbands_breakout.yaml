@@ -1,0 +1,35 @@
+hypothesis_id: h_0013
+name: unholy_grails_bbands_breakout
+version: "0.1"
+
+idea: >
+  Unholy Grails inspired long-only setup:
+  buy when close is above Bollinger upper band built on 100-period SMA with +3 std;
+  sell next open when close is below Bollinger lower band built with -1 std.
+
+created_by: "agent"
+created_at: "2026-05-29"
+
+universe: "liquid_us_largecaps"
+timeframe: "5m"
+holding_period_bars: 10000
+entry_type: "breakout_close"
+direction_bias: "long_only"
+risk_model: "fixed_fractional"
+
+required_features:
+  - atr_14
+
+family: bollinger_breakout
+
+parameters:
+  bb_period: 100
+  entry_std_mult: 3.0
+  exit_std_mult: 1.0
+  fallback_stop_atr: 0.25
+  take_profit_distance_atr: 100.0
+  max_hold_bars: 10000
+
+status: "draft"
+
+eval: {}

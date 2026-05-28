@@ -9,6 +9,7 @@ from strategies.hypotheses.h_0006_prev_day_high_reclaim_quality import PriorDayH
 from strategies.hypotheses.h_0007_opening_range_continuation_confirmed import OpeningRangeContinuationConfirmed
 from strategies.hypotheses.h_0011_prev_day_low_atr_breakout_eod import PrevDayLowAtrBreakoutEod
 from strategies.hypotheses.h_0012_prev_day_low_atr_breakout_eod_wider import PrevDayLowAtrBreakoutEodWider
+from strategies.hypotheses.h_0013_unholy_grails_bbands_breakout import UnholyGrailsBbandsBreakout
 from src.types import Bar
 
 
@@ -372,4 +373,34 @@ def test_prev_day_low_atr_breakout_eod_wider_is_stricter_than_h0011() -> None:
     }
 
     # With this synthetic data, h_0011 threshold is crossed but h_0012 is not.
+    assert hyp.generate_signals(bars, features) == []
+
+
+def test_unholy_grails_bbands_breakout_triggers_above_upper_band() -> None:
+    hyp = UnholyGrailsBbandsBreakout()
+
+    start = datetime(2026, 1, 2, 14, 30, tzinfo=timezone.utc)
+    bars = [_bar_at(start + timedelta(minutes=5 * i), 100.0) for i in range(100)]
+    bars[-1] = _bar_at(start + timedelta(minutes=5 * 99), 104.0)
+
+    features = {
+        "atr_14": 1.0,
+    }
+
+    signals = hyp.generate_signals(bars, features)
+    assert len(signals) == 1
+    assert signals[0].hypothesis_id == "h_0013"
+    assert signals[0].max_hold_bars == 10000
+
+
+def test_unholy_grails_bbands_breakout_skips_without_breakout() -> None:
+    hyp = UnholyGrailsBbandsBreakout()
+
+    start = datetime(2026, 1, 2, 14, 30, tzinfo=timezone.utc)
+    bars = [_bar_at(start + timedelta(minutes=5 * i), 100.0) for i in range(100)]
+
+    features = {
+        "atr_14": 1.0,
+    }
+
     assert hyp.generate_signals(bars, features) == []
