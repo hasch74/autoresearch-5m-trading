@@ -1,0 +1,47 @@
+hypothesis_id: h_0007
+name: opening_range_continuation_confirmed
+version: "0.1"
+
+idea: >
+  First-hour opening-range continuation with market-context confirmation.
+  Enter only when price freshly clears OR high with strong relative volume,
+  positive session backdrop, and controlled extension (avoid chase entries).
+
+created_by: "agent"
+created_at: "2026-05-28"
+
+universe: "liquid_us_largecaps"
+timeframe: "5m"
+holding_period_bars: 8
+entry_type: "long"
+direction_bias: "long_only"
+risk_model: "fixed_fractional"
+
+required_features:
+  - or_high
+  - atr_14
+  - atr_pct
+  - rvol_20
+  - minutes_since_open
+  - session_gap_pct
+  - ret_open_to_now
+
+family: opening_range_continuation
+
+parameters:
+  min_minutes_since_open: 30
+  max_minutes_since_open: 60
+  min_rvol: 1.35
+  min_breakout_buffer_atr: 0.06
+  max_extension_above_or_atr: 0.80
+  min_session_gap_pct: -0.001
+  min_ret_open_to_now: 0.001
+  min_atr_pct: 0.002
+  max_atr_pct: 0.015
+  stop_atr_mult: 0.85
+  take_profit_atr_mult: 1.55
+  max_hold_bars: 8
+
+status: "draft"
+
+eval: {}

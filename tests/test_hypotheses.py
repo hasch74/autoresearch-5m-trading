@@ -6,6 +6,7 @@ from strategies.hypotheses.h_0003_vwap_reversion import VwapReversionBaseline
 from strategies.hypotheses.h_0004_prev_day_high_reclaim import PriorDayHighReclaimBaseline
 from strategies.hypotheses.h_0005_vwap_reversion_selective import VwapReversionSelective
 from strategies.hypotheses.h_0006_prev_day_high_reclaim_quality import PriorDayHighReclaimQuality
+from strategies.hypotheses.h_0007_opening_range_continuation_confirmed import OpeningRangeContinuationConfirmed
 from src.types import Bar
 
 
@@ -263,3 +264,58 @@ def test_prior_day_high_reclaim_quality_blocks_overextended_reclaim() -> None:
     }
 
     assert hyp.generate_signals(bars, features) == []
+
+
+def test_opening_range_continuation_confirmed_triggers_with_quality_context() -> None:
+    hyp = OpeningRangeContinuationConfirmed()
+
+    start = datetime(2026, 1, 2, 15, 0, tzinfo=timezone.utc)
+    bars = [
+        _bar_at(start, 100.0),
+        _bar_at(start + timedelta(minutes=5), 100.35),
+    ]
+    features = {
+        "or_high": 100.2,
+        "atr_14": 1.0,
+        "atr_pct": 0.006,
+        "rvol_20": 1.5,
+        "minutes_since_open": 35,
+        "session_gap_pct": 0.001,
+        "ret_open_to_now": 0.003,
+    }
+
+    signals = hyp.generate_signals(bars, features)
+    assert len(signals) == 1
+    assert signals[0].hypothesis_id == "h_0007"
+
+
+def test_opening_range_continuation_confirmed_blocks_outside_first_hour_or_overextended() -> None:
+    hyp = OpeningRangeContinuationConfirmed()
+    start = datetime(2026, 1, 2, 16, 30, tzinfo=timezone.utc)
+
+    bars = [
+        _bar_at(start, 100.0),
+        _bar_at(start + timedelta(minutes=5), 101.3),
+    ]
+
+    outside_window = {
+        "or_high": 100.2,
+        "atr_14": 1.0,
+        "atr_pct": 0.006,
+        "rvol_20": 1.6,
+        "minutes_since_open": 90,
+        "session_gap_pct": 0.001,
+        "ret_open_to_now": 0.004,
+    }
+    overextended = {
+        "or_high": 100.2,
+        "atr_14": 1.0,
+        "atr_pct": 0.006,
+        "rvol_20": 1.6,
+        "minutes_since_open": 35,
+        "session_gap_pct": 0.001,
+        "ret_open_to_now": 0.004,
+    }
+
+    assert hyp.generate_signals(bars, outside_window) == []
+    assert hyp.generate_signals(bars, overextended) == []
