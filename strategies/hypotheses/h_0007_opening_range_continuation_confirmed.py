@@ -20,16 +20,16 @@ class OpeningRangeContinuationConfirmed:
     """First-hour opening-range continuation with quality gates."""
 
     name: str = "opening_range_continuation_confirmed"
-    version: str = "0.1"
+    version: str = "0.2"
     hypothesis_id: str = "h_0007"
 
-    min_minutes_since_open: int = 30
-    max_minutes_since_open: int = 60
-    min_rvol: float = 1.35
+    min_minutes_since_open: int = 25
+    max_minutes_since_open: int = 55
+    min_rvol: float = 1.4
     min_breakout_buffer_atr: float = 0.06
-    max_extension_above_or_atr: float = 0.80
-    min_session_gap_pct: float = -0.001
-    min_ret_open_to_now: float = 0.001
+    max_extension_above_or_atr: float = 0.55
+    min_session_gap_pct: float = 0.0
+    min_ret_open_to_now: float = 0.002
     min_atr_pct: float = 0.002
     max_atr_pct: float = 0.015
     stop_atr_mult: float = 0.85
