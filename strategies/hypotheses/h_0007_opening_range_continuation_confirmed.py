@@ -36,6 +36,31 @@ class OpeningRangeContinuationConfirmed:
     take_profit_atr_mult: float = 1.55
     max_hold_bars: int = 8
 
+    _FUNNEL_KEYS: tuple[str, ...] = (
+        "bars_total",
+        "opening_range_available",
+        "in_time_window",
+        "rvol_pass",
+        "atr_volatility_pass",
+        "gap_filter_pass",
+        "ret_open_to_now_pass",
+        "breakout_up",
+        "extension_pass",
+        "final_signals",
+    )
+
+    def __init__(self) -> None:
+        self.reset_signal_funnel()
+
+    def reset_signal_funnel(self) -> None:
+        self._signal_funnel = {k: 0 for k in self._FUNNEL_KEYS}
+
+    def get_signal_funnel(self) -> dict[str, int]:
+        return dict(self._signal_funnel)
+
+    def _bump_funnel(self, key: str) -> None:
+        self._signal_funnel[key] = self._signal_funnel.get(key, 0) + 1
+
     def required_features(self) -> Sequence[str]:
         return [
             "or_high",
@@ -52,6 +77,7 @@ class OpeningRangeContinuationConfirmed:
         bars: Sequence[Bar],
         features: dict,
     ) -> Sequence[Signal]:
+        self._bump_funnel("bars_total")
         if len(bars) < 2:
             return []
 
@@ -66,6 +92,9 @@ class OpeningRangeContinuationConfirmed:
         session_gap_pct: float | None = features.get("session_gap_pct")
         ret_open_to_now: float | None = features.get("ret_open_to_now")
 
+        if or_high is not None:
+            self._bump_funnel("opening_range_available")
+
         if any(v is None for v in (or_high, atr, atr_pct, rvol, minutes_since_open, session_gap_pct, ret_open_to_now)):
             return []
         if atr <= 0:
@@ -73,16 +102,21 @@ class OpeningRangeContinuationConfirmed:
 
         if not (self.min_minutes_since_open <= minutes_since_open <= self.max_minutes_since_open):
             return []
+        self._bump_funnel("in_time_window")
         if rvol < self.min_rvol:
             return []
+        self._bump_funnel("rvol_pass")
         if not (self.min_atr_pct <= atr_pct <= self.max_atr_pct):
             return []
+        self._bump_funnel("atr_volatility_pass")
 
         # Market-context proxies: avoid weak/bearish session backdrop.
         if session_gap_pct < self.min_session_gap_pct:
             return []
+        self._bump_funnel("gap_filter_pass")
         if ret_open_to_now < self.min_ret_open_to_now:
             return []
+        self._bump_funnel("ret_open_to_now_pass")
 
         # Require true reclaim/breakout now, not a stale move from earlier bars.
         if prev_bar.close >= or_high:
@@ -91,12 +125,15 @@ class OpeningRangeContinuationConfirmed:
         breakout_buffer = self.min_breakout_buffer_atr * atr
         if bar.close <= or_high + breakout_buffer:
             return []
+        self._bump_funnel("breakout_up")
 
         extension_atr = (bar.close - or_high) / atr
         if extension_atr > self.max_extension_above_or_atr:
             return []
+        self._bump_funnel("extension_pass")
 
         confidence = min(1.0, 0.45 + 0.12 * extension_atr + 0.08 * max(0.0, rvol - self.min_rvol))
+        self._bump_funnel("final_signals")
         return [
             Signal(
                 hypothesis_id=self.hypothesis_id,

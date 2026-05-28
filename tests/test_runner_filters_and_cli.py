@@ -5,6 +5,7 @@ from concurrent.futures import Future
 import pandas as pd
 import pytest
 
+from strategies.hypotheses.h_0007_opening_range_continuation_confirmed import OpeningRangeContinuationConfirmed
 from src.agent_runner import runner
 from src.agent_runner.runner import ResearchRunner
 from src.types import EvalResult, HypothesisStatus
@@ -299,3 +300,73 @@ def test_runner_serial_parallel_outputs_match(tmp_path: Path, monkeypatch: pytes
     assert serial_symbols == sorted(serial_symbols)
     assert parallel_symbols == sorted(parallel_symbols)
     assert serial_symbols == parallel_symbols
+
+
+def _feature_df_h0007(symbol: str = "SPY") -> pd.DataFrame:
+    rows = []
+    base = pd.Timestamp("2026-01-02T14:30:00Z")
+    closes = [100.00, 100.05, 100.10, 100.15, 100.18, 100.35, 100.30]
+    minutes = [0, 5, 10, 15, 20, 35, 40]
+    rets = [0.0000, 0.0005, 0.0010, 0.0015, 0.0018, 0.0035, 0.0030]
+    for i, close in enumerate(closes):
+        ts = base + pd.Timedelta(minutes=5 * i)
+        rows.append(
+            {
+                "event_time": ts,
+                "available_time": ts + pd.Timedelta(seconds=5),
+                "symbol": symbol,
+                "open": close - 0.05,
+                "high": close + 0.10,
+                "low": close - 0.10,
+                "close": close,
+                "volume": 1000 + i * 10,
+                "or_high": 100.20,
+                "atr_14": 1.0,
+                "atr_pct": 0.006,
+                "rvol_20": 1.6,
+                "minutes_since_open": float(minutes[i]),
+                "session_gap_pct": 0.001,
+                "ret_open_to_now": rets[i],
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def test_runner_h0007_report_includes_signal_funnel(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    features_dir = tmp_path / "features"
+    reports_dir = tmp_path / "reports"
+    features_dir.mkdir(parents=True)
+    _feature_df_h0007("SPY").to_parquet(features_dir / "SPY_5m.parquet", index=False)
+
+    monkeypatch.setattr(
+        "src.agent_runner.runner.load_all",
+        lambda _p: {"h_0007": OpeningRangeContinuationConfirmed()},
+    )
+    monkeypatch.setattr("src.agent_runner.runner.score", lambda r: r)
+    monkeypatch.setattr(
+        "src.agent_runner.runner.check_gates",
+        lambda _r: SimpleNamespace(passed=True, failed_gates=[]),
+    )
+    monkeypatch.setattr(
+        "src.agent_runner.runner.walk_forward_splits",
+        lambda df, **_kwargs: iter([(df.copy(), df.copy(), df.copy())]),
+    )
+
+    report = ResearchRunner(
+        features_dir=features_dir,
+        reports_dir=reports_dir,
+        include_hypotheses=["h_0007"],
+        workers=1,
+    ).run_once()
+
+    result = report["results"]["h_0007"]
+    assert "signal_funnel" in result
+    funnel = result["signal_funnel"]
+    required_keys = {
+        "bars_total",
+        "opening_range_available",
+        "final_signals",
+        "executed_trades",
+    }
+    assert required_keys.issubset(set(funnel))
+    assert funnel["executed_trades"] == result["n_trades"]

@@ -118,22 +118,63 @@ def _load_symbol_frame(path: Path, max_days: int | None = None) -> pd.DataFrame:
     return _clip_frame_max_days(frame, max_days)
 
 
+def _reset_signal_funnel_if_supported(hypothesis: Any) -> None:
+    reset = getattr(hypothesis, "reset_signal_funnel", None)
+    if callable(reset):
+        reset()
+
+
+def _extract_signal_funnel_if_supported(hypothesis: Any) -> dict[str, int] | None:
+    getter = getattr(hypothesis, "get_signal_funnel", None)
+    if not callable(getter):
+        return None
+
+    try:
+        raw = getter()
+    except Exception:  # noqa: BLE001
+        return None
+
+    if not isinstance(raw, dict):
+        return None
+
+    normalized: dict[str, int] = {}
+    for key, value in raw.items():
+        if not isinstance(key, str):
+            continue
+        try:
+            normalized[key] = int(value)
+        except (TypeError, ValueError):
+            continue
+    return normalized
+
+
+def _merge_signal_funnels(funnels: list[dict[str, int]]) -> dict[str, int]:
+    merged: dict[str, int] = {}
+    for funnel in funnels:
+        for key, value in funnel.items():
+            merged[key] = merged.get(key, 0) + int(value)
+    return merged
+
+
 def _run_symbol_backtest_task(
     symbol: str,
     frame_path: Path,
     module_name: str,
     class_name: str,
     max_days: int | None,
-) -> tuple[str, EvalResult | None, str | None]:
+) -> tuple[str, EvalResult | None, str | None, dict[str, int] | None]:
     """Run one symbol-level full backtest task in a worker process."""
     try:
         symbol_df = _load_symbol_frame(frame_path, max_days=max_days)
         if symbol_df.empty:
-            return symbol, None, None
+            return symbol, None, None, None
         hypothesis = _instantiate_hypothesis(module_name, class_name)
-        return symbol, run_backtest(symbol_df, hypothesis), None
+        _reset_signal_funnel_if_supported(hypothesis)
+        result = run_backtest(symbol_df, hypothesis)
+        funnel = _extract_signal_funnel_if_supported(hypothesis)
+        return symbol, result, None, funnel
     except Exception as exc:  # noqa: BLE001
-        return symbol, None, str(exc)
+        return symbol, None, str(exc), None
 
 
 def _run_symbol_walk_forward_task(
@@ -256,7 +297,7 @@ class ResearchRunner:
             hyp_module = hyp.__class__.__module__
             hyp_class = hyp.__class__.__name__
             try:
-                symbol_results, symbol_timing, full_backtest_seconds = self._run_symbol_backtests(
+                symbol_results, symbol_timing, full_backtest_seconds, signal_funnel = self._run_symbol_backtests(
                     feature_frames,
                     feature_paths,
                     hyp,
@@ -312,6 +353,10 @@ class ResearchRunner:
                         else HypothesisStatus.QUARANTINED.value
                     ),
                 }
+                if signal_funnel:
+                    merged_funnel = dict(signal_funnel)
+                    merged_funnel["executed_trades"] = int(scored_result.total_trades)
+                    outcome["signal_funnel"] = dict(sorted(merged_funnel.items()))
                 results[hyp_id] = outcome
                 timings["hypotheses"][hyp_id] = {
                     "full_backtest_seconds": round(full_backtest_seconds, 4),
@@ -538,9 +583,10 @@ class ResearchRunner:
         hypothesis: Any,
         module_name: str,
         class_name: str,
-    ) -> tuple[list[EvalResult], dict[str, float], float]:
+    ) -> tuple[list[EvalResult], dict[str, float], float, dict[str, int]]:
         """Run full backtests per symbol, in parallel when workers > 1."""
         symbol_results: list[EvalResult] = []
+        symbol_funnels: list[dict[str, int]] = []
         symbol_timing: dict[str, float] = {}
         full_backtest_seconds = 0.0
         hyp_id = getattr(hypothesis, "hypothesis_id", "unknown")
@@ -573,7 +619,7 @@ class ResearchRunner:
                         symbol_timing[symbol] = round(elapsed, 4)
                         full_backtest_seconds += elapsed
 
-                        task_symbol, result, error = fut.result()
+                        task_symbol, result, error, funnel = fut.result()
                         if error:
                             logger.warning("Backtest task failed for %s: %s", symbol, error)
                             continue
@@ -581,6 +627,8 @@ class ResearchRunner:
                             logger.warning("Backtest task symbol mismatch: expected %s got %s", symbol, task_symbol)
                         if result is not None:
                             symbol_results.append(result)
+                        if funnel is not None:
+                            symbol_funnels.append(funnel)
                 except TimeoutError:
                     logger.error(
                         "Full-backtest timeout for %s after %ss; pending symbols: %s",
@@ -610,13 +658,17 @@ class ResearchRunner:
             if symbol_df.empty:
                 symbol_timing[symbol] = round(time.perf_counter() - symbol_start, 4)
                 continue
+            _reset_signal_funnel_if_supported(hypothesis)
             symbol_result = run_backtest(symbol_df, hypothesis)
             symbol_results.append(symbol_result)
+            funnel = _extract_signal_funnel_if_supported(hypothesis)
+            if funnel is not None:
+                symbol_funnels.append(funnel)
             symbol_elapsed = time.perf_counter() - symbol_start
             full_backtest_seconds += symbol_elapsed
             symbol_timing[symbol] = round(symbol_elapsed, 4)
 
-        return symbol_results, symbol_timing, full_backtest_seconds
+        return symbol_results, symbol_timing, full_backtest_seconds, _merge_signal_funnels(symbol_funnels)
 
     def _load_walk_forward_config(self) -> dict[str, int]:
         defaults = {"train_days": 60, "validate_days": 20, "test_days": 20}
