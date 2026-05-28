@@ -49,6 +49,43 @@ _RISK_CONFIG_PATH = Path("configs/risk.yaml")
 _COSTS_CONFIG_PATH = Path("configs/costs.yaml")
 _UNIVERSE_CONFIG_PATH = Path("configs/universe.yaml")
 _DEFAULT_PHASE_TIMEOUT_SECONDS = 900
+_FAST_DEFAULT_WORKERS = 4
+_FAST_DEFAULT_MAX_DAYS = 120
+_FAST_DEFAULT_SYMBOLS = ["SPY", "QQQ"]
+
+
+def _normalize_name_list(values: list[str] | None, uppercase: bool = False) -> list[str]:
+    """Normalize list-like CLI values with comma/space tolerant parsing."""
+    if not values:
+        return []
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw in values:
+        for part in str(raw).split(","):
+            item = part.strip()
+            if not item:
+                continue
+            item = item.upper() if uppercase else item
+            if item in seen:
+                continue
+            seen.add(item)
+            normalized.append(item)
+    return normalized
+
+
+def _clip_frame_max_days(frame: pd.DataFrame, max_days: int | None) -> pd.DataFrame:
+    """Clip a frame to the trailing max_days window by event_time, if configured."""
+    if max_days is None or max_days <= 0 or frame.empty or "event_time" not in frame.columns:
+        return frame
+
+    times = pd.to_datetime(frame["event_time"], utc=True, errors="coerce")
+    valid_times = times.dropna()
+    if valid_times.empty:
+        return frame
+
+    cutoff = valid_times.max() - pd.Timedelta(days=max_days)
+    clipped = frame.loc[times >= cutoff]
+    return _prepare_symbol_frame(clipped)
 
 
 def _instantiate_hypothesis(module_name: str, class_name: str) -> Any:
@@ -74,10 +111,11 @@ def _prepare_symbol_frame(frame: pd.DataFrame) -> pd.DataFrame:
     return frame
 
 
-def _load_symbol_frame(path: Path) -> pd.DataFrame:
+def _load_symbol_frame(path: Path, max_days: int | None = None) -> pd.DataFrame:
     """Load and normalize one symbol parquet frame."""
     frame = pd.read_parquet(path)
-    return _prepare_symbol_frame(frame)
+    frame = _prepare_symbol_frame(frame)
+    return _clip_frame_max_days(frame, max_days)
 
 
 def _run_symbol_backtest_task(
@@ -85,10 +123,11 @@ def _run_symbol_backtest_task(
     frame_path: Path,
     module_name: str,
     class_name: str,
+    max_days: int | None,
 ) -> tuple[str, EvalResult | None, str | None]:
     """Run one symbol-level full backtest task in a worker process."""
     try:
-        symbol_df = _load_symbol_frame(frame_path)
+        symbol_df = _load_symbol_frame(frame_path, max_days=max_days)
         if symbol_df.empty:
             return symbol, None, None
         hypothesis = _instantiate_hypothesis(module_name, class_name)
@@ -103,10 +142,11 @@ def _run_symbol_walk_forward_task(
     module_name: str,
     class_name: str,
     config: dict[str, int],
+    max_days: int | None,
 ) -> tuple[str, list[float], str | None]:
     """Run all walk-forward folds for one symbol in a worker process."""
     try:
-        symbol_df = _load_symbol_frame(frame_path)
+        symbol_df = _load_symbol_frame(frame_path, max_days=max_days)
         if symbol_df.empty:
             return symbol, [], None
 
@@ -147,11 +187,21 @@ class ResearchRunner:
         hypotheses_dir: Path = Path("strategies/hypotheses"),
         risk_config_path: Path = _RISK_CONFIG_PATH,
         workers: int | None = None,
+        include_hypotheses: list[str] | None = None,
+        exclude_hypotheses: list[str] | None = None,
+        symbols: list[str] | None = None,
+        max_days: int | None = None,
+        fast_mode: bool = False,
     ) -> None:
         self.features_dir = features_dir
         self.reports_dir = reports_dir
         self.hypotheses_dir = hypotheses_dir
         self.risk_config_path = risk_config_path
+        self.include_hypotheses = _normalize_name_list(include_hypotheses)
+        self.exclude_hypotheses = _normalize_name_list(exclude_hypotheses)
+        self.symbols = _normalize_name_list(symbols, uppercase=True)
+        self.max_days = max_days if max_days is None else max(1, int(max_days))
+        self.fast_mode = bool(fast_mode)
         if workers is None:
             env_workers = os.getenv("AUTORESEARCH_WORKERS")
             self.workers = max(1, int(env_workers)) if env_workers else 1
@@ -181,13 +231,14 @@ class ResearchRunner:
         }
 
         registry = load_all(self.hypotheses_dir)
+        registry = self._filter_registry(registry)
         if not registry:
             logger.warning("No hypotheses found in %s", self.hypotheses_dir)
-            return {"hypotheses_evaluated": 0}
+            return {"hypotheses_evaluated": 0, "warning": "no_hypotheses_selected"}
 
         # Load all available feature files
         load_start = time.perf_counter()
-        feature_paths = self._discover_feature_paths()
+        feature_paths = self._filter_feature_paths(self._discover_feature_paths())
         feature_frames = self._load_feature_frames(feature_paths)
         timings["load_features_seconds"] = round(time.perf_counter() - load_start, 4)
         if not feature_frames:
@@ -315,10 +366,46 @@ class ResearchRunner:
         frames = {}
         for symbol, path in sorted(feature_paths.items()):
             try:
-                frames[symbol] = _load_symbol_frame(path)
+                frames[symbol] = _load_symbol_frame(path, max_days=self.max_days)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Could not load features for %s: %s", symbol, exc)
         return frames
+
+    def _filter_registry(self, registry: dict[str, Any]) -> dict[str, Any]:
+        if self.include_hypotheses:
+            include_set = set(self.include_hypotheses)
+            missing = sorted(include_set.difference(registry))
+            if missing:
+                raise ValueError(f"Unknown hypotheses requested: {', '.join(missing)}")
+            registry = {k: registry[k] for k in registry if k in include_set}
+
+        if self.exclude_hypotheses:
+            exclude_set = set(self.exclude_hypotheses)
+            unknown = sorted(exclude_set.difference(registry))
+            if unknown:
+                logger.warning("Ignoring unknown excluded hypotheses: %s", ",".join(unknown))
+            registry = {k: v for k, v in registry.items() if k not in exclude_set}
+
+        return registry
+
+    def _filter_feature_paths(self, feature_paths: dict[str, Path]) -> dict[str, Path]:
+        if not self.symbols:
+            return feature_paths
+
+        selected: dict[str, Path] = {}
+        missing: list[str] = []
+        for symbol in self.symbols:
+            path = feature_paths.get(symbol)
+            if path is None:
+                missing.append(symbol)
+                continue
+            selected[symbol] = path
+
+        if missing:
+            logger.warning("Requested symbols not found in features: %s", ",".join(missing))
+        if not selected:
+            raise ValueError("No selected symbols found in feature data")
+        return selected
 
     def _save_report(self, report: dict, run_at: datetime | None = None) -> None:
         ts = (run_at or datetime.now(timezone.utc)).strftime("%Y%m%d_%H%M%S")
@@ -357,6 +444,7 @@ class ResearchRunner:
                         module_name or hypothesis.__class__.__module__,
                         class_name or hypothesis.__class__.__name__,
                         config,
+                        self.max_days,
                     ): symbol
                     for symbol in symbols
                 }
@@ -473,6 +561,7 @@ class ResearchRunner:
                         feature_paths[symbol],
                         module_name,
                         class_name,
+                        self.max_days,
                     )
                     futures[fut] = (symbol, symbol_start)
 
@@ -563,6 +652,13 @@ class ResearchRunner:
                 "universe": self._config_descriptor(_UNIVERSE_CONFIG_PATH),
             },
             "walk_forward": wf_config,
+            "execution": {
+                "fast_mode": self.fast_mode,
+                "max_days": self.max_days,
+                "include_hypotheses": self.include_hypotheses,
+                "exclude_hypotheses": self.exclude_hypotheses,
+                "symbols": self.symbols,
+            },
             "data": {
                 "features_dir": str(self.features_dir),
                 **data_summary,
@@ -702,10 +798,60 @@ def main() -> None:
         default=None,
         help="Number of process workers for symbol/fold parallelism (default: 1 unless AUTORESEARCH_WORKERS is set).",
     )
+    parser.add_argument(
+        "--hypotheses",
+        nargs="+",
+        default=None,
+        help="Hypothesis IDs to include (space or comma-separated).",
+    )
+    parser.add_argument(
+        "--exclude-hypotheses",
+        nargs="+",
+        default=None,
+        help="Hypothesis IDs to exclude (space or comma-separated).",
+    )
+    parser.add_argument(
+        "--symbols",
+        nargs="+",
+        default=None,
+        help="Symbols to include (space or comma-separated).",
+    )
+    parser.add_argument(
+        "--max-days",
+        type=int,
+        default=None,
+        help="Restrict each symbol to trailing N days by event_time.",
+    )
+    parser.add_argument(
+        "--fast",
+        action="store_true",
+        help="Run fast smoke defaults when explicit values are not provided.",
+    )
     args = parser.parse_args()
 
+    include_hypotheses = _normalize_name_list(args.hypotheses)
+    exclude_hypotheses = _normalize_name_list(args.exclude_hypotheses)
+    symbols = _normalize_name_list(args.symbols, uppercase=True)
+
+    workers = args.workers
+    max_days = args.max_days
+    if args.fast:
+        if workers is None:
+            workers = _FAST_DEFAULT_WORKERS
+        if max_days is None:
+            max_days = _FAST_DEFAULT_MAX_DAYS
+        if not symbols:
+            symbols = list(_FAST_DEFAULT_SYMBOLS)
+
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-    report = ResearchRunner(workers=args.workers).run_once()
+    report = ResearchRunner(
+        workers=workers,
+        include_hypotheses=include_hypotheses,
+        exclude_hypotheses=exclude_hypotheses,
+        symbols=symbols,
+        max_days=max_days,
+        fast_mode=args.fast,
+    ).run_once()
     print(json.dumps({
         "run_at": report.get("run_at"),
         "hypotheses_evaluated": report.get("hypotheses_evaluated"),
