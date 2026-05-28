@@ -15,7 +15,6 @@ Constraints enforced:
 
 from __future__ import annotations
 
-import math  # used for sqrt in slippage_sensitivity if needed later
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Sequence
@@ -43,6 +42,7 @@ class _OpenTrade:
     symbol: str
     direction: Direction
     entry_price: float
+    entry_execution_cost: float
     stop_price: float
     tp_price: float
     max_hold_bars: int
@@ -132,6 +132,7 @@ def run_backtest(
             if signals:
                 sig = signals[0]  # take first signal only
                 atr = features.get("atr_14", 1.0) or 1.0
+                entry_execution_cost = _entry_execution_cost(bar.close, atr, cost_model)
                 entry_price = _entry_fill(bar.close, sig.direction, atr, cost_model)
                 stop_price = _stop_price(entry_price, sig.direction, sig.stop_distance_atr, atr)
                 tp_price = _tp_price(entry_price, sig.direction, sig.take_profit_distance_atr, atr)
@@ -140,6 +141,7 @@ def run_backtest(
                     symbol=bar.symbol,
                     direction=sig.direction,
                     entry_price=entry_price,
+                    entry_execution_cost=entry_execution_cost,
                     stop_price=stop_price,
                     tp_price=tp_price,
                     max_hold_bars=sig.max_hold_bars,
@@ -148,12 +150,15 @@ def run_backtest(
 
         # Force-close at session end
         if open_trade is not None and is_last_bar_of_session:
+            exit_execution_cost = _exit_execution_cost(bar.close, 0.0, cost_model)
             exit_price = _exit_fill(bar.close, open_trade.direction, 0.0, cost_model)
             pnl = _pnl(open_trade.entry_price, exit_price, open_trade.direction, open_trade.shares)
             closed_trades.append({
                 "exit_reason": "session_end",
                 "pnl": pnl,
+                "execution_cost": (open_trade.entry_execution_cost + exit_execution_cost) * open_trade.shares,
                 "bars_held": i - open_trade.entry_bar_idx + 1,
+                "exit_time": bar.event_time,
             })
             open_trade = None
 
@@ -193,17 +198,25 @@ def _is_session_last_bar(
 
 
 def _entry_fill(close: float, direction: Direction, atr: float, cm: _CostModel) -> float:
-    slip = max(atr * cm.entry_atr_fraction, close * cm.min_slippage_bps / 10_000)
-    spread = close * cm.half_spread_bps / 10_000
-    cost = slip + spread
+    cost = _entry_execution_cost(close, atr, cm)
     return close + cost if direction == Direction.LONG else close - cost
 
 
 def _exit_fill(close: float, direction: Direction, atr: float, cm: _CostModel) -> float:
+    cost = _exit_execution_cost(close, atr, cm)
+    return close - cost if direction == Direction.LONG else close + cost
+
+
+def _entry_execution_cost(close: float, atr: float, cm: _CostModel) -> float:
+    slip = max(atr * cm.entry_atr_fraction, close * cm.min_slippage_bps / 10_000)
+    spread = close * cm.half_spread_bps / 10_000
+    return slip + spread
+
+
+def _exit_execution_cost(close: float, atr: float, cm: _CostModel) -> float:
     slip = max(atr * cm.exit_atr_fraction, close * cm.min_slippage_bps / 10_000) if atr else 0.0
     spread = close * cm.half_spread_bps / 10_000
-    cost = slip + spread
-    return close - cost if direction == Direction.LONG else close + cost
+    return slip + spread
 
 
 def _stop_price(entry: float, direction: Direction, stop_atr_mult: float, atr: float) -> float:
@@ -237,20 +250,41 @@ def _check_exit(
               (direction == Direction.SHORT and bar.low <= trade.tp_price)
 
     if stop_hit:
+        exit_execution_cost = _exit_execution_cost(trade.stop_price, atr_approx, cm)
         exit_price = _exit_fill(trade.stop_price, direction, atr_approx, cm)
         pnl = _pnl(trade.entry_price, exit_price, direction, trade.shares)
-        return {"exit_reason": "stop", "pnl": pnl, "bars_held": bars_held}
+        return {
+            "exit_reason": "stop",
+            "pnl": pnl,
+            "execution_cost": (trade.entry_execution_cost + exit_execution_cost) * trade.shares,
+            "bars_held": bars_held,
+            "exit_time": bar.event_time,
+        }
 
     if tp_hit:
+        exit_execution_cost = _exit_execution_cost(trade.tp_price, atr_approx, cm)
         exit_price = _exit_fill(trade.tp_price, direction, atr_approx, cm)
         pnl = _pnl(trade.entry_price, exit_price, direction, trade.shares)
-        return {"exit_reason": "tp", "pnl": pnl, "bars_held": bars_held}
+        return {
+            "exit_reason": "tp",
+            "pnl": pnl,
+            "execution_cost": (trade.entry_execution_cost + exit_execution_cost) * trade.shares,
+            "bars_held": bars_held,
+            "exit_time": bar.event_time,
+        }
 
     if bars_held >= trade.max_hold_bars or force_close:
+        exit_execution_cost = _exit_execution_cost(bar.close, atr_approx, cm)
         exit_price = _exit_fill(bar.close, direction, atr_approx, cm)
         pnl = _pnl(trade.entry_price, exit_price, direction, trade.shares)
         reason = "max_hold" if bars_held >= trade.max_hold_bars else "session_end"
-        return {"exit_reason": reason, "pnl": pnl, "bars_held": bars_held}
+        return {
+            "exit_reason": reason,
+            "pnl": pnl,
+            "execution_cost": (trade.entry_execution_cost + exit_execution_cost) * trade.shares,
+            "bars_held": bars_held,
+            "exit_time": bar.event_time,
+        }
 
     return None
 
@@ -284,12 +318,14 @@ def _build_eval(hypothesis: object, trades: list[dict], total_bars: int) -> Eval
         return _empty_eval(hypothesis)
 
     pnls = [t["pnl"] for t in trades]
+    per_trade_commission = 2.0
+    net_trade_pnls = [pnl - per_trade_commission for pnl in pnls]
     wins = [p for p in pnls if p > 0]
     losses = [p for p in pnls if p <= 0]
 
     gross_pnl = sum(pnls)
     # Commission: $1 min per leg × 2 legs = $2 per trade (unit-size simplification)
-    total_commission = len(trades) * 2.0
+    total_commission = len(trades) * per_trade_commission
     net_pnl = gross_pnl - total_commission
 
     win_rate = len(wins) / len(pnls) if pnls else 0.0
@@ -299,7 +335,7 @@ def _build_eval(hypothesis: object, trades: list[dict], total_bars: int) -> Eval
 
     # Max drawdown (equity curve)
     equity = [0.0]
-    for p in pnls:
+    for p in net_trade_pnls:
         equity.append(equity[-1] + p)
     peak = equity[0]
     max_dd = 0.0
@@ -307,8 +343,26 @@ def _build_eval(hypothesis: object, trades: list[dict], total_bars: int) -> Eval
         peak = max(peak, e)
         max_dd = max(max_dd, peak - e)
 
-    # Worst day (most negative single-day PnL)
-    worst_day = min(pnls) if pnls else 0.0
+    # Daily metrics use day-aggregated net trade PnL in New York session time.
+    day_pnls: dict[date, float] = {}
+    intraday_drawdowns: list[float] = []
+    day_equity: dict[date, list[float]] = {}
+    for trade, trade_net_pnl in zip(trades, net_trade_pnls, strict=True):
+        session_day = pd.Timestamp(trade["exit_time"]).tz_convert("America/New_York").date()
+        day_pnls[session_day] = day_pnls.get(session_day, 0.0) + trade_net_pnl
+        day_curve = day_equity.setdefault(session_day, [0.0])
+        day_curve.append(day_curve[-1] + trade_net_pnl)
+
+    for curve in day_equity.values():
+        day_peak = curve[0]
+        day_dd = 0.0
+        for point in curve:
+            day_peak = max(day_peak, point)
+            day_dd = max(day_dd, day_peak - point)
+        intraday_drawdowns.append(day_dd)
+
+    worst_day = min(day_pnls.values()) if day_pnls else 0.0
+    max_intraday_drawdown = max(intraday_drawdowns) if intraday_drawdowns else 0.0
 
     # Longest losing streak
     max_streak = cur_streak = 0
@@ -326,11 +380,11 @@ def _build_eval(hypothesis: object, trades: list[dict], total_bars: int) -> Eval
     total_bars_held = sum(t["bars_held"] for t in trades)
     exposure_time = total_bars_held / total_bars if total_bars else 0.0
 
-    # Slippage sensitivity: recompute net_pnl with 2x slippage, measure delta / net_pnl
+    # Slippage sensitivity: recompute net_pnl under doubled spread/slippage costs.
     slippage_sensitivity = 0.0
     if net_pnl != 0:
-        doubled_commission = total_commission * 2.0
-        net_2x = gross_pnl - doubled_commission
+        stressed_gross_pnl = sum(t["pnl"] - t["execution_cost"] for t in trades)
+        net_2x = stressed_gross_pnl - total_commission
         slippage_sensitivity = abs(net_pnl - net_2x) / abs(net_pnl)
 
     # Composite score placeholder (evaluator module will override)
@@ -346,7 +400,7 @@ def _build_eval(hypothesis: object, trades: list[dict], total_bars: int) -> Eval
         avg_win=round(avg_win, 4),
         avg_loss=round(avg_loss, 4),
         max_drawdown=round(max_dd, 4),
-        max_intraday_drawdown=round(max_dd, 4),  # simplified: same as max_dd for now
+        max_intraday_drawdown=round(max_intraday_drawdown, 4),
         worst_day=round(worst_day, 4),
         longest_losing_streak=max_streak,
         trades_per_day=round(trades_per_day, 4),

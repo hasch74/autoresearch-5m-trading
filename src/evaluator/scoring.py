@@ -33,7 +33,8 @@ _DEFAULTS = {
     "min_trades": 30,
     "min_win_rate": 0.40,
     "min_profit_factor": 1.10,
-    "max_drawdown_pct": 0.10,    # 10% of equity (unit: fraction of net_pnl scale)
+    "max_drawdown_pct": 0.10,    # 10% of starting equity
+    "starting_equity": 10_000.0,
     "min_net_pnl": 0.0,
     "max_slippage_sensitivity": 1.0,
     "min_trades_per_day": 0.5,
@@ -61,7 +62,7 @@ def check_gates(result: EvalResult, thresholds: dict | None = None) -> GateResul
         failed.append(f"min_win_rate: {result.win_rate:.3f} < {t['min_win_rate']}")
     if result.profit_factor < t["min_profit_factor"]:
         failed.append(f"min_profit_factor: {result.profit_factor:.3f} < {t['min_profit_factor']}")
-    if result.max_drawdown > t["max_drawdown_pct"] * abs(result.net_pnl or 1.0):
+    if result.max_drawdown > t["max_drawdown_pct"] * t["starting_equity"]:
         failed.append(f"max_drawdown: {result.max_drawdown:.3f} > limit")
     if result.net_pnl < t["min_net_pnl"]:
         failed.append(f"min_net_pnl: {result.net_pnl:.3f} < {t['min_net_pnl']}")
