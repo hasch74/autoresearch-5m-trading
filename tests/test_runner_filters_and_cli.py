@@ -1,5 +1,6 @@
 from pathlib import Path
 from types import SimpleNamespace
+from concurrent.futures import Future
 
 import pandas as pd
 import pytest
@@ -222,3 +223,79 @@ def test_main_respects_explicit_overrides_in_fast_mode(monkeypatch: pytest.Monke
     assert captured["symbols"] == ["NVDA"]
     assert captured["include_hypotheses"] == ["h_0006"]
     assert captured["exclude_hypotheses"] == ["h_0005"]
+
+
+class _InlineProcessPoolExecutor:
+    """Test executor that runs submitted tasks inline for deterministic assertions."""
+
+    def __init__(self, max_workers=None, mp_context=None):
+        self.max_workers = max_workers
+        self.mp_context = mp_context
+
+    def submit(self, fn, *args, **kwargs):
+        fut: Future = Future()
+        try:
+            fut.set_result(fn(*args, **kwargs))
+        except Exception as exc:  # noqa: BLE001
+            fut.set_exception(exc)
+        return fut
+
+    def shutdown(self, wait=False, cancel_futures=False):
+        return None
+
+
+def test_runner_serial_parallel_outputs_match(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    features_dir = tmp_path / "features"
+    reports_dir = tmp_path / "reports"
+    features_dir.mkdir(parents=True)
+
+    _feature_df("SPY", days=6).to_parquet(features_dir / "SPY_5m.parquet", index=False)
+    _feature_df("QQQ", days=6).to_parquet(features_dir / "QQQ_5m.parquet", index=False)
+
+    monkeypatch.setattr("src.agent_runner.runner.load_all", lambda _p: {"h_a": _HypA()})
+    monkeypatch.setattr("src.agent_runner.runner.score", lambda r: r)
+    monkeypatch.setattr(
+        "src.agent_runner.runner.check_gates",
+        lambda _r: SimpleNamespace(passed=False, failed_gates=["gate_example"]),
+    )
+    monkeypatch.setattr(
+        "src.agent_runner.runner.walk_forward_splits",
+        lambda df, **_kwargs: iter([(df.iloc[:2].copy(), df.iloc[2:4].copy(), df.iloc[4:].copy())]),
+    )
+    monkeypatch.setattr("src.agent_runner.runner.ProcessPoolExecutor", _InlineProcessPoolExecutor)
+    monkeypatch.setattr(ResearchRunner, "_git_commit_hash", lambda self: "c" * 40)
+    monkeypatch.setattr(ResearchRunner, "_git_is_dirty", lambda self: False)
+
+    def fake_run_backtest(df: pd.DataFrame, hyp: _HypA) -> EvalResult:
+        net = float(df["close"].sum())
+        trades = int(len(df))
+        return _eval_for(getattr(hyp, "hypothesis_id", "unknown"), net_pnl=net, trades=trades)
+
+    monkeypatch.setattr("src.agent_runner.runner.run_backtest", fake_run_backtest)
+
+    report_serial = ResearchRunner(
+        features_dir=features_dir,
+        reports_dir=reports_dir,
+        workers=1,
+    ).run_once()
+    report_parallel = ResearchRunner(
+        features_dir=features_dir,
+        reports_dir=reports_dir,
+        workers=4,
+    ).run_once()
+
+    serial_result = report_serial["results"]["h_a"]
+    parallel_result = report_parallel["results"]["h_a"]
+    assert serial_result["recommended_status"] == parallel_result["recommended_status"]
+    assert serial_result["gate_passed"] == parallel_result["gate_passed"]
+    assert serial_result["n_trades"] == parallel_result["n_trades"]
+    assert serial_result["net_pnl"] == parallel_result["net_pnl"]
+    assert serial_result["failed_gates"] == parallel_result["failed_gates"]
+    assert serial_result["walk_forward"]["folds"] == parallel_result["walk_forward"]["folds"]
+    assert serial_result["walk_forward"]["passed"] == parallel_result["walk_forward"]["passed"]
+
+    serial_symbols = list(report_serial["timings"]["hypotheses"]["h_a"]["symbols"].keys())
+    parallel_symbols = list(report_parallel["timings"]["hypotheses"]["h_a"]["symbols"].keys())
+    assert serial_symbols == sorted(serial_symbols)
+    assert parallel_symbols == sorted(parallel_symbols)
+    assert serial_symbols == parallel_symbols
