@@ -7,6 +7,7 @@ from strategies.hypotheses.h_0004_prev_day_high_reclaim import PriorDayHighRecla
 from strategies.hypotheses.h_0005_vwap_reversion_selective import VwapReversionSelective
 from strategies.hypotheses.h_0006_prev_day_high_reclaim_quality import PriorDayHighReclaimQuality
 from strategies.hypotheses.h_0007_opening_range_continuation_confirmed import OpeningRangeContinuationConfirmed
+from strategies.hypotheses.h_0015_opening_range_continuation_wide_window import OpeningRangeContinuationWideWindow
 from strategies.hypotheses.h_0011_prev_day_low_atr_breakout_eod import PrevDayLowAtrBreakoutEod
 from strategies.hypotheses.h_0012_prev_day_low_atr_breakout_eod_wider import PrevDayLowAtrBreakoutEodWider
 from strategies.hypotheses.h_0013_unholy_grails_bbands_breakout import UnholyGrailsBbandsBreakout
@@ -322,6 +323,50 @@ def test_opening_range_continuation_confirmed_blocks_outside_first_hour_or_overe
 
     assert hyp.generate_signals(bars, outside_window) == []
     assert hyp.generate_signals(bars, overextended) == []
+
+
+def test_opening_range_continuation_wide_window_triggers_in_extended_window() -> None:
+    hyp = OpeningRangeContinuationWideWindow()
+
+    start = datetime(2026, 1, 2, 15, 0, tzinfo=timezone.utc)
+    bars = [
+        _bar_at(start, 100.0),
+        _bar_at(start + timedelta(minutes=5), 100.35),
+    ]
+    features = {
+        "or_high": 100.2,
+        "atr_14": 1.0,
+        "atr_pct": 0.006,
+        "rvol_20": 1.2,
+        "minutes_since_open": 120,
+        "session_gap_pct": 0.001,
+        "ret_open_to_now": 0.003,
+    }
+
+    signals = hyp.generate_signals(bars, features)
+    assert len(signals) == 1
+    assert signals[0].hypothesis_id == "h_0015"
+
+
+def test_opening_range_continuation_wide_window_blocks_outside_extended_window() -> None:
+    hyp = OpeningRangeContinuationWideWindow()
+
+    start = datetime(2026, 1, 2, 15, 0, tzinfo=timezone.utc)
+    bars = [
+        _bar_at(start, 100.0),
+        _bar_at(start + timedelta(minutes=5), 100.35),
+    ]
+    features = {
+        "or_high": 100.2,
+        "atr_14": 1.0,
+        "atr_pct": 0.006,
+        "rvol_20": 1.2,
+        "minutes_since_open": 155,
+        "session_gap_pct": 0.001,
+        "ret_open_to_now": 0.003,
+    }
+
+    assert hyp.generate_signals(bars, features) == []
 
 
 def test_prev_day_low_atr_breakout_eod_triggers_on_cross() -> None:
