@@ -113,6 +113,7 @@ def run_backtest(
             for col in feature_cols
             if pd.notna(value := getattr(row, col))
         }
+        current_atr = features.get("atr_14", 1.0) or 1.0
 
         is_last_bar_of_session = _is_session_last_bar(
             eastern_series.iloc[i], df, eastern_series, i
@@ -122,7 +123,12 @@ def run_backtest(
         if open_trade is not None:
             bars_held = i - open_trade.entry_bar_idx
             trade_result = _check_exit(
-                open_trade, bar, bars_held, is_last_bar_of_session, cost_model
+                open_trade,
+                bar,
+                bars_held,
+                is_last_bar_of_session,
+                current_atr,
+                cost_model,
             )
             if trade_result is not None:
                 closed_trades.append(trade_result)
@@ -133,7 +139,7 @@ def run_backtest(
             signals: Sequence[Signal] = hypothesis.generate_signals(bars_list, features)
             if signals:
                 sig = signals[0]  # take first signal only
-                atr = features.get("atr_14", 1.0) or 1.0
+                atr = current_atr
                 entry_execution_cost = _entry_execution_cost(bar.close, atr, cost_model)
                 entry_price = _entry_fill(bar.close, sig.direction, atr, cost_model)
                 stop_price = _stop_price(entry_price, sig.direction, sig.stop_distance_atr, atr)
@@ -152,8 +158,8 @@ def run_backtest(
 
         # Force-close at session end
         if open_trade is not None and is_last_bar_of_session:
-            exit_execution_cost = _exit_execution_cost(bar.close, 0.0, cost_model)
-            exit_price = _exit_fill(bar.close, open_trade.direction, 0.0, cost_model)
+            exit_execution_cost = _exit_execution_cost(bar.close, current_atr, cost_model)
+            exit_price = _exit_fill(bar.close, open_trade.direction, current_atr, cost_model)
             pnl = _pnl(open_trade.entry_price, exit_price, open_trade.direction, open_trade.shares)
             closed_trades.append({
                 "exit_reason": "session_end",
@@ -239,11 +245,11 @@ def _check_exit(
     bar: Bar,
     bars_held: int,
     force_close: bool,
+    exit_atr: float,
     cm: _CostModel,
 ) -> dict | None:
     """Check stop, TP, max-hold, and force-close exits. Returns trade dict or None."""
     direction = trade.direction
-    atr_approx = 0.0  # no live ATR for exit slippage; already baked into fill model
 
     # Stop hit (pessimistic: check bar low/high)
     stop_hit = (direction == Direction.LONG and bar.low <= trade.stop_price) or \
@@ -252,8 +258,8 @@ def _check_exit(
               (direction == Direction.SHORT and bar.low <= trade.tp_price)
 
     if stop_hit:
-        exit_execution_cost = _exit_execution_cost(trade.stop_price, atr_approx, cm)
-        exit_price = _exit_fill(trade.stop_price, direction, atr_approx, cm)
+        exit_execution_cost = _exit_execution_cost(trade.stop_price, exit_atr, cm)
+        exit_price = _exit_fill(trade.stop_price, direction, exit_atr, cm)
         pnl = _pnl(trade.entry_price, exit_price, direction, trade.shares)
         return {
             "exit_reason": "stop",
@@ -264,8 +270,8 @@ def _check_exit(
         }
 
     if tp_hit:
-        exit_execution_cost = _exit_execution_cost(trade.tp_price, atr_approx, cm)
-        exit_price = _exit_fill(trade.tp_price, direction, atr_approx, cm)
+        exit_execution_cost = _exit_execution_cost(trade.tp_price, exit_atr, cm)
+        exit_price = _exit_fill(trade.tp_price, direction, exit_atr, cm)
         pnl = _pnl(trade.entry_price, exit_price, direction, trade.shares)
         return {
             "exit_reason": "tp",
@@ -276,8 +282,8 @@ def _check_exit(
         }
 
     if bars_held >= trade.max_hold_bars or force_close:
-        exit_execution_cost = _exit_execution_cost(bar.close, atr_approx, cm)
-        exit_price = _exit_fill(bar.close, direction, atr_approx, cm)
+        exit_execution_cost = _exit_execution_cost(bar.close, exit_atr, cm)
+        exit_price = _exit_fill(bar.close, direction, exit_atr, cm)
         pnl = _pnl(trade.entry_price, exit_price, direction, trade.shares)
         reason = "max_hold" if bars_held >= trade.max_hold_bars else "session_end"
         return {

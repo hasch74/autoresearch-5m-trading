@@ -121,7 +121,7 @@ def test_backtester_slippage_sensitivity_uses_execution_cost_stress() -> None:
     result = run_backtest(df, _FlatHoldHypothesis({0}))
 
     assert result.total_trades == 1
-    assert result.slippage_sensitivity == 0.0521
+    assert result.slippage_sensitivity == 0.0741
 
 
 def test_backtester_aggregates_worst_day_and_intraday_drawdown_by_session() -> None:
@@ -154,5 +154,5 @@ def test_backtester_aggregates_worst_day_and_intraday_drawdown_by_session() -> N
     result = run_backtest(df, _FlatHoldHypothesis({0, 2, 4}))
 
     assert result.total_trades == 3
-    assert result.worst_day == -4.22
-    assert result.max_intraday_drawdown == 4.22
+    assert result.worst_day == -4.32
+    assert result.max_intraday_drawdown == 4.32
