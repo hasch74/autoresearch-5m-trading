@@ -61,15 +61,32 @@ def _instantiate_hypothesis(module_name: str, class_name: str) -> Any:
     return klass()
 
 
+def _prepare_symbol_frame(frame: pd.DataFrame) -> pd.DataFrame:
+    """Return a stable, event-time-ordered frame with contiguous index."""
+    if frame.empty:
+        return frame
+    if "event_time" in frame.columns and not frame["event_time"].is_monotonic_increasing:
+        frame = frame.sort_values("event_time", kind="mergesort")
+    if not isinstance(frame.index, pd.RangeIndex) or frame.index.start != 0:
+        frame = frame.reset_index(drop=True)
+    return frame
+
+
+def _load_symbol_frame(path: Path) -> pd.DataFrame:
+    """Load and normalize one symbol parquet frame."""
+    frame = pd.read_parquet(path)
+    return _prepare_symbol_frame(frame)
+
+
 def _run_symbol_backtest_task(
     symbol: str,
-    frame: pd.DataFrame,
+    frame_path: Path,
     module_name: str,
     class_name: str,
 ) -> tuple[str, EvalResult | None, str | None]:
     """Run one symbol-level full backtest task in a worker process."""
     try:
-        symbol_df = frame.sort_values("event_time").reset_index(drop=True)
+        symbol_df = _load_symbol_frame(frame_path)
         if symbol_df.empty:
             return symbol, None, None
         hypothesis = _instantiate_hypothesis(module_name, class_name)
@@ -80,14 +97,14 @@ def _run_symbol_backtest_task(
 
 def _run_symbol_walk_forward_task(
     symbol: str,
-    frame: pd.DataFrame,
+    frame_path: Path,
     module_name: str,
     class_name: str,
     config: dict[str, int],
 ) -> tuple[str, list[float], str | None]:
     """Run all walk-forward folds for one symbol in a worker process."""
     try:
-        symbol_df = frame.sort_values("event_time").reset_index(drop=True)
+        symbol_df = _load_symbol_frame(frame_path)
         if symbol_df.empty:
             return symbol, [], None
 
@@ -162,7 +179,8 @@ class ResearchRunner:
 
         # Load all available feature files
         load_start = time.perf_counter()
-        feature_frames = self._load_feature_frames()
+        feature_paths = self._discover_feature_paths()
+        feature_frames = self._load_feature_frames(feature_paths)
         timings["load_features_seconds"] = round(time.perf_counter() - load_start, 4)
         if not feature_frames:
             logger.warning("No feature data found in %s; run data_ingest first", self.features_dir)
@@ -181,6 +199,7 @@ class ResearchRunner:
             try:
                 symbol_results, symbol_timing, full_backtest_seconds = self._run_symbol_backtests(
                     feature_frames,
+                    feature_paths,
                     hyp,
                     hyp_module,
                     hyp_class,
@@ -193,7 +212,14 @@ class ResearchRunner:
                 scored_result = score(raw_result)
                 gate = check_gates(scored_result)
                 wf_start = time.perf_counter()
-                wf_summary = self._run_walk_forward(feature_frames, hyp, wf_config, hyp_module, hyp_class)
+                wf_summary = self._run_walk_forward(
+                    feature_frames,
+                    feature_paths,
+                    hyp,
+                    wf_config,
+                    hyp_module,
+                    hyp_class,
+                )
                 walk_forward_seconds = time.perf_counter() - wf_start
 
                 failed_gates = list(gate.failed_gates)
@@ -232,7 +258,7 @@ class ResearchRunner:
                     "full_backtest_seconds": round(full_backtest_seconds, 4),
                     "walk_forward_seconds": round(walk_forward_seconds, 4),
                     "total_seconds": round(time.perf_counter() - hyp_start, 4),
-                    "symbols": symbol_timing,
+                    "symbols": dict(sorted(symbol_timing.items())),
                 }
                 logger.info(
                     "%s: score=%.3f gates=%s trades=%d",
@@ -255,7 +281,7 @@ class ResearchRunner:
             "run_at": run_at.isoformat(),
             "hypotheses_evaluated": len(results),
             "provenance": self._build_provenance(feature_frames, wf_config),
-            "results": results,
+            "results": {k: results[k] for k in sorted(results)},
             "timings": timings,
         }
         write_start = time.perf_counter()
@@ -270,12 +296,18 @@ class ResearchRunner:
     # Private
     # ------------------------------------------------------------------
 
-    def _load_feature_frames(self) -> dict[str, pd.DataFrame]:
-        frames = {}
+    def _discover_feature_paths(self) -> dict[str, Path]:
+        paths: dict[str, Path] = {}
         for path in sorted(self.features_dir.glob("*_5m.parquet")):
             symbol = path.name.replace("_5m.parquet", "")
+            paths[symbol] = path
+        return paths
+
+    def _load_feature_frames(self, feature_paths: dict[str, Path]) -> dict[str, pd.DataFrame]:
+        frames = {}
+        for symbol, path in sorted(feature_paths.items()):
             try:
-                frames[symbol] = pd.read_parquet(path)
+                frames[symbol] = _load_symbol_frame(path)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Could not load features for %s: %s", symbol, exc)
         return frames
@@ -289,6 +321,7 @@ class ResearchRunner:
     def _run_walk_forward(
         self,
         feature_frames: dict[str, pd.DataFrame],
+        feature_paths: dict[str, Path],
         hypothesis: Any,
         config: dict[str, int] | None = None,
         module_name: str | None = None,
@@ -308,12 +341,12 @@ class ResearchRunner:
                         ex.submit(
                             _run_symbol_walk_forward_task,
                             symbol,
-                            frame,
+                            feature_paths[symbol],
                             module_name or hypothesis.__class__.__module__,
                             class_name or hypothesis.__class__.__name__,
                             config,
                         ): symbol
-                        for symbol, frame in sorted(feature_frames.items())
+                        for symbol in sorted(feature_frames)
                     }
                     for fut in as_completed(futures):
                         symbol = futures[fut]
@@ -329,8 +362,7 @@ class ResearchRunner:
                 use_parallel = False
 
         if not use_parallel:
-            for frame in feature_frames.values():
-                symbol_df = frame.sort_values("event_time").reset_index(drop=True)
+            for _symbol, symbol_df in sorted(feature_frames.items()):
                 if symbol_df.empty:
                     continue
                 for _train_df, _val_df, test_df in walk_forward_splits(
@@ -381,6 +413,7 @@ class ResearchRunner:
     def _run_symbol_backtests(
         self,
         feature_frames: dict[str, pd.DataFrame],
+        feature_paths: dict[str, Path],
         hypothesis: Any,
         module_name: str,
         class_name: str,
@@ -395,9 +428,15 @@ class ResearchRunner:
             try:
                 with ProcessPoolExecutor(max_workers=self.workers) as ex:
                     futures = {}
-                    for symbol, frame in sorted(feature_frames.items()):
+                    for symbol in sorted(feature_frames):
                         symbol_start = time.perf_counter()
-                        fut = ex.submit(_run_symbol_backtest_task, symbol, frame, module_name, class_name)
+                        fut = ex.submit(
+                            _run_symbol_backtest_task,
+                            symbol,
+                            feature_paths[symbol],
+                            module_name,
+                            class_name,
+                        )
                         futures[fut] = (symbol, symbol_start)
 
                     for fut in as_completed(futures):
@@ -419,9 +458,8 @@ class ResearchRunner:
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Parallel full backtest failed; falling back to sequential mode: %s", exc)
 
-        for symbol, frame in feature_frames.items():
+        for symbol, symbol_df in sorted(feature_frames.items()):
             symbol_start = time.perf_counter()
-            symbol_df = frame.sort_values("event_time").reset_index(drop=True)
             if symbol_df.empty:
                 symbol_timing[symbol] = round(time.perf_counter() - symbol_start, 4)
                 continue
