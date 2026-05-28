@@ -8,6 +8,7 @@ from strategies.hypotheses.h_0005_vwap_reversion_selective import VwapReversionS
 from strategies.hypotheses.h_0006_prev_day_high_reclaim_quality import PriorDayHighReclaimQuality
 from strategies.hypotheses.h_0007_opening_range_continuation_confirmed import OpeningRangeContinuationConfirmed
 from strategies.hypotheses.h_0011_prev_day_low_atr_breakout_eod import PrevDayLowAtrBreakoutEod
+from strategies.hypotheses.h_0012_prev_day_low_atr_breakout_eod_wider import PrevDayLowAtrBreakoutEodWider
 from src.types import Bar
 
 
@@ -354,4 +355,21 @@ def test_prev_day_low_atr_breakout_eod_requires_fresh_cross() -> None:
         "minutes_to_close": 60,
     }
 
+    assert hyp.generate_signals(bars, features) == []
+
+
+def test_prev_day_low_atr_breakout_eod_wider_is_stricter_than_h0011() -> None:
+    hyp = PrevDayLowAtrBreakoutEodWider()
+
+    start = datetime(2026, 1, 2, 14, 30, tzinfo=timezone.utc)
+    bars = [_bar_at(start + timedelta(minutes=5 * i), 100.0) for i in range(41)]
+    bars[-2] = _bar_at(start + timedelta(minutes=5 * 39), 99.0)
+    bars[-1] = _bar_at(start + timedelta(minutes=5 * 40), 99.18)
+
+    features = {
+        "prior_day_low": 99.0,
+        "minutes_to_close": 90,
+    }
+
+    # With this synthetic data, h_0011 threshold is crossed but h_0012 is not.
     assert hyp.generate_signals(bars, features) == []

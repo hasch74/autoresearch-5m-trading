@@ -1,0 +1,33 @@
+hypothesis_id: h_0012
+name: prev_day_low_atr_breakout_eod_wider
+version: "0.1"
+
+idea: >
+  Controlled stricter variant of h_0011 with entry at
+  prior_day_low + 1.0 * ATR(40), then hold through end of session.
+
+created_by: "agent"
+created_at: "2026-05-29"
+
+universe: "liquid_us_largecaps"
+timeframe: "5m"
+holding_period_bars: "dynamic_to_eod"
+entry_type: "stop"
+direction_bias: "long_only"
+risk_model: "fixed_fractional"
+
+required_features:
+  - prior_day_low
+  - minutes_to_close
+
+family: previous_day_levels
+
+parameters:
+  atr_period: 40
+  atr_multiplier: 1.0
+  stop_distance_atr: 100.0
+  take_profit_distance_atr: 100.0
+
+status: "draft"
+
+eval: {}
