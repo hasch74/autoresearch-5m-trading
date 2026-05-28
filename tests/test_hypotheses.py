@@ -7,6 +7,7 @@ from strategies.hypotheses.h_0004_prev_day_high_reclaim import PriorDayHighRecla
 from strategies.hypotheses.h_0005_vwap_reversion_selective import VwapReversionSelective
 from strategies.hypotheses.h_0006_prev_day_high_reclaim_quality import PriorDayHighReclaimQuality
 from strategies.hypotheses.h_0007_opening_range_continuation_confirmed import OpeningRangeContinuationConfirmed
+from strategies.hypotheses.h_0011_prev_day_low_atr_breakout_eod import PrevDayLowAtrBreakoutEod
 from src.types import Bar
 
 
@@ -319,3 +320,38 @@ def test_opening_range_continuation_confirmed_blocks_outside_first_hour_or_overe
 
     assert hyp.generate_signals(bars, outside_window) == []
     assert hyp.generate_signals(bars, overextended) == []
+
+
+def test_prev_day_low_atr_breakout_eod_triggers_on_cross() -> None:
+    hyp = PrevDayLowAtrBreakoutEod()
+
+    start = datetime(2026, 1, 2, 14, 30, tzinfo=timezone.utc)
+    bars = [_bar_at(start + timedelta(minutes=5 * i), 100.0) for i in range(41)]
+    bars[-2] = _bar_at(start + timedelta(minutes=5 * 39), 99.0)
+    bars[-1] = _bar_at(start + timedelta(minutes=5 * 40), 99.4)
+
+    features = {
+        "prior_day_low": 99.0,
+        "minutes_to_close": 120,
+    }
+
+    signals = hyp.generate_signals(bars, features)
+    assert len(signals) == 1
+    assert signals[0].hypothesis_id == "h_0011"
+    assert signals[0].max_hold_bars == 24
+
+
+def test_prev_day_low_atr_breakout_eod_requires_fresh_cross() -> None:
+    hyp = PrevDayLowAtrBreakoutEod()
+
+    start = datetime(2026, 1, 2, 14, 30, tzinfo=timezone.utc)
+    bars = [_bar_at(start + timedelta(minutes=5 * i), 100.0) for i in range(41)]
+    bars[-2] = _bar_at(start + timedelta(minutes=5 * 39), 100.0)
+    bars[-1] = _bar_at(start + timedelta(minutes=5 * 40), 100.2)
+
+    features = {
+        "prior_day_low": 99.0,
+        "minutes_to_close": 60,
+    }
+
+    assert hyp.generate_signals(bars, features) == []
