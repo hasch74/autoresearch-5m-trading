@@ -20,10 +20,12 @@ from __future__ import annotations
 import argparse
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import hashlib
+import importlib
 import json
 import logging
 import os
 import subprocess
+import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -47,12 +49,30 @@ _COSTS_CONFIG_PATH = Path("configs/costs.yaml")
 _UNIVERSE_CONFIG_PATH = Path("configs/universe.yaml")
 
 
-def _run_symbol_backtest_task(symbol: str, frame: pd.DataFrame, hypothesis: Any) -> tuple[str, EvalResult | None, str | None]:
+def _instantiate_hypothesis(module_name: str, class_name: str) -> Any:
+    """Instantiate hypothesis class in worker process from module/class spec."""
+    if "." not in module_name:
+        hypotheses_path = str(Path("strategies/hypotheses").resolve())
+        if hypotheses_path not in sys.path:
+            sys.path.append(hypotheses_path)
+
+    module = importlib.import_module(module_name)
+    klass = getattr(module, class_name)
+    return klass()
+
+
+def _run_symbol_backtest_task(
+    symbol: str,
+    frame: pd.DataFrame,
+    module_name: str,
+    class_name: str,
+) -> tuple[str, EvalResult | None, str | None]:
     """Run one symbol-level full backtest task in a worker process."""
     try:
         symbol_df = frame.sort_values("event_time").reset_index(drop=True)
         if symbol_df.empty:
             return symbol, None, None
+        hypothesis = _instantiate_hypothesis(module_name, class_name)
         return symbol, run_backtest(symbol_df, hypothesis), None
     except Exception as exc:  # noqa: BLE001
         return symbol, None, str(exc)
@@ -61,7 +81,8 @@ def _run_symbol_backtest_task(symbol: str, frame: pd.DataFrame, hypothesis: Any)
 def _run_symbol_walk_forward_task(
     symbol: str,
     frame: pd.DataFrame,
-    hypothesis: Any,
+    module_name: str,
+    class_name: str,
     config: dict[str, int],
 ) -> tuple[str, list[float], str | None]:
     """Run all walk-forward folds for one symbol in a worker process."""
@@ -70,6 +91,7 @@ def _run_symbol_walk_forward_task(
         if symbol_df.empty:
             return symbol, [], None
 
+        hypothesis = _instantiate_hypothesis(module_name, class_name)
         net_pnls: list[float] = []
         for _train_df, _val_df, test_df in walk_forward_splits(
             symbol_df,
@@ -154,8 +176,15 @@ class ResearchRunner:
             full_backtest_seconds = 0.0
             walk_forward_seconds = 0.0
             symbol_timing: dict[str, float] = {}
+            hyp_module = hyp.__class__.__module__
+            hyp_class = hyp.__class__.__name__
             try:
-                symbol_results, symbol_timing, full_backtest_seconds = self._run_symbol_backtests(feature_frames, hyp)
+                symbol_results, symbol_timing, full_backtest_seconds = self._run_symbol_backtests(
+                    feature_frames,
+                    hyp,
+                    hyp_module,
+                    hyp_class,
+                )
 
                 if not symbol_results:
                     raise ValueError("no_symbol_results")
@@ -164,7 +193,7 @@ class ResearchRunner:
                 scored_result = score(raw_result)
                 gate = check_gates(scored_result)
                 wf_start = time.perf_counter()
-                wf_summary = self._run_walk_forward(feature_frames, hyp, wf_config)
+                wf_summary = self._run_walk_forward(feature_frames, hyp, wf_config, hyp_module, hyp_class)
                 walk_forward_seconds = time.perf_counter() - wf_start
 
                 failed_gates = list(gate.failed_gates)
@@ -233,6 +262,8 @@ class ResearchRunner:
         self._save_report(report, run_at)
         timings["report_write_seconds"] = round(time.perf_counter() - write_start, 4)
         timings["total_seconds"] = round(time.perf_counter() - run_start, 4)
+        # Persist finalized timing fields (set after first write).
+        self._save_report(report, run_at)
         return report
 
     # ------------------------------------------------------------------
@@ -260,6 +291,8 @@ class ResearchRunner:
         feature_frames: dict[str, pd.DataFrame],
         hypothesis: Any,
         config: dict[str, int] | None = None,
+        module_name: str | None = None,
+        class_name: str | None = None,
     ) -> dict[str, Any]:
         config = config or self._load_walk_forward_config()
         min_positive_fold_ratio = 0.60
@@ -272,7 +305,14 @@ class ResearchRunner:
             try:
                 with ProcessPoolExecutor(max_workers=self.workers) as ex:
                     futures = {
-                        ex.submit(_run_symbol_walk_forward_task, symbol, frame, hypothesis, config): symbol
+                        ex.submit(
+                            _run_symbol_walk_forward_task,
+                            symbol,
+                            frame,
+                            module_name or hypothesis.__class__.__module__,
+                            class_name or hypothesis.__class__.__name__,
+                            config,
+                        ): symbol
                         for symbol, frame in sorted(feature_frames.items())
                     }
                     for fut in as_completed(futures):
@@ -342,6 +382,8 @@ class ResearchRunner:
         self,
         feature_frames: dict[str, pd.DataFrame],
         hypothesis: Any,
+        module_name: str,
+        class_name: str,
     ) -> tuple[list[EvalResult], dict[str, float], float]:
         """Run full backtests per symbol, in parallel when workers > 1."""
         symbol_results: list[EvalResult] = []
@@ -355,7 +397,7 @@ class ResearchRunner:
                     futures = {}
                     for symbol, frame in sorted(feature_frames.items()):
                         symbol_start = time.perf_counter()
-                        fut = ex.submit(_run_symbol_backtest_task, symbol, frame, hypothesis)
+                        fut = ex.submit(_run_symbol_backtest_task, symbol, frame, module_name, class_name)
                         futures[fut] = (symbol, symbol_start)
 
                     for fut in as_completed(futures):

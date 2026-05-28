@@ -1,0 +1,491 @@
+{
+  "run_at": "2026-05-28T10:11:07.264090+00:00",
+  "hypotheses_evaluated": 6,
+  "provenance": {
+    "git": {
+      "commit": "0d6c5b888c804b86b9686877a24d1dd231c3425a",
+      "is_dirty": true
+    },
+    "configs": {
+      "risk": {
+        "path": "configs\\risk.yaml",
+        "sha256": "fd3b0a88279d82aefbef995785be8940d29e28bc8d7e9825e4f0ca5cc288d229"
+      },
+      "costs": {
+        "path": "configs\\costs.yaml",
+        "sha256": "a2f46dd3cc6b60f633553c61eb1e5b00a215e7d69ac2a968c90b5d1632f9d17c"
+      },
+      "universe": {
+        "path": "configs\\universe.yaml",
+        "sha256": "f4cc44bf0c5ab1cc9e464395fdf23b8d15513ed6f8b1d621b052a22b868fe0ca"
+      }
+    },
+    "walk_forward": {
+      "train_days": 60,
+      "validate_days": 20,
+      "test_days": 20
+    },
+    "data": {
+      "features_dir": "data\\features",
+      "symbol_count": 23,
+      "total_bars": 622609,
+      "event_time_start": "2025-01-02T14:30:00+00:00",
+      "event_time_end": "2026-05-26T19:55:00+00:00",
+      "symbol_coverage": {
+        "AAPL": {
+          "bars": 27037,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "AMZN": {
+          "bars": 27054,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "BAC": {
+          "bars": 27057,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "COST": {
+          "bars": 27059,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "CVX": {
+          "bars": 27110,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "GOOGL": {
+          "bars": 27032,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "GS": {
+          "bars": 27055,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "HD": {
+          "bars": 27055,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "IWM": {
+          "bars": 27056,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "JNJ": {
+          "bars": 27109,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "JPM": {
+          "bars": 27106,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "LLY": {
+          "bars": 27057,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "META": {
+          "bars": 27058,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "MSFT": {
+          "bars": 27112,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "NVDA": {
+          "bars": 27056,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "PFE": {
+          "bars": 27106,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "QQQ": {
+          "bars": 27113,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "SPY": {
+          "bars": 27055,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "TSLA": {
+          "bars": 27052,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "UNH": {
+          "bars": 27054,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "V": {
+          "bars": 27106,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "WMT": {
+          "bars": 27053,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        },
+        "XOM": {
+          "bars": 27057,
+          "event_time_start": "2025-01-02T14:30:00+00:00",
+          "event_time_end": "2026-05-26T19:55:00+00:00"
+        }
+      }
+    }
+  },
+  "results": {
+    "h_0001": {
+      "hypothesis_id": "h_0001",
+      "n_trades": 488,
+      "net_pnl": -1128.675,
+      "composite_score": 0.3376,
+      "gate_passed": false,
+      "failed_gates": [
+        "min_win_rate: 0.389 < 0.4",
+        "min_profit_factor: 0.626 < 1.1",
+        "min_net_pnl: -1128.675 < 0.0",
+        "min_trades_per_day: 0.069 < 0.5",
+        "walk_forward_positive_fold_ratio: 0.037 < 0.600",
+        "walk_forward_median_oos_net_pnl: -2.030 <= 0.000"
+      ],
+      "walk_forward": {
+        "folds": 299,
+        "positive_folds": 11,
+        "positive_fold_ratio": 0.0368,
+        "median_oos_net_pnl": -2.0295,
+        "min_positive_fold_ratio": 0.6,
+        "min_median_oos_net_pnl": 0.0,
+        "passed": false
+      },
+      "recommended_status": "quarantined"
+    },
+    "h_0002": {
+      "hypothesis_id": "h_0002",
+      "n_trades": 513,
+      "net_pnl": -839.7106,
+      "composite_score": 0.3444,
+      "gate_passed": false,
+      "failed_gates": [
+        "min_net_pnl: -839.711 < 0.0",
+        "min_trades_per_day: 0.093 < 0.5",
+        "walk_forward_positive_fold_ratio: 0.033 < 0.600",
+        "walk_forward_median_oos_net_pnl: 0.000 <= 0.000"
+      ],
+      "walk_forward": {
+        "folds": 299,
+        "positive_folds": 10,
+        "positive_fold_ratio": 0.0334,
+        "median_oos_net_pnl": 0.0,
+        "min_positive_fold_ratio": 0.6,
+        "min_median_oos_net_pnl": 0.0,
+        "passed": false
+      },
+      "recommended_status": "quarantined"
+    },
+    "h_0003": {
+      "hypothesis_id": "h_0003",
+      "n_trades": 63935,
+      "net_pnl": -146458.5655,
+      "composite_score": 0.409,
+      "gate_passed": false,
+      "failed_gates": [
+        "min_win_rate: 0.309 < 0.4",
+        "min_profit_factor: 0.457 < 1.1",
+        "max_drawdown: 8410.822 > limit",
+        "min_net_pnl: -146458.565 < 0.0",
+        "walk_forward_positive_fold_ratio: 0.000 < 0.600",
+        "walk_forward_median_oos_net_pnl: -357.332 <= 0.000"
+      ],
+      "walk_forward": {
+        "folds": 299,
+        "positive_folds": 0,
+        "positive_fold_ratio": 0.0,
+        "median_oos_net_pnl": -357.3323,
+        "min_positive_fold_ratio": 0.6,
+        "min_median_oos_net_pnl": 0.0,
+        "passed": false
+      },
+      "recommended_status": "quarantined"
+    },
+    "h_0004": {
+      "hypothesis_id": "h_0004",
+      "n_trades": 2377,
+      "net_pnl": -5437.8194,
+      "composite_score": 0.24,
+      "gate_passed": false,
+      "failed_gates": [
+        "min_win_rate: 0.241 < 0.4",
+        "min_profit_factor: 0.501 < 1.1",
+        "min_net_pnl: -5437.819 < 0.0",
+        "min_trades_per_day: 0.303 < 0.5",
+        "walk_forward_positive_fold_ratio: 0.010 < 0.600",
+        "walk_forward_median_oos_net_pnl: -12.462 <= 0.000"
+      ],
+      "walk_forward": {
+        "folds": 299,
+        "positive_folds": 3,
+        "positive_fold_ratio": 0.01,
+        "median_oos_net_pnl": -12.4624,
+        "min_positive_fold_ratio": 0.6,
+        "min_median_oos_net_pnl": 0.0,
+        "passed": false
+      },
+      "recommended_status": "quarantined"
+    },
+    "h_0005": {
+      "hypothesis_id": "h_0005",
+      "n_trades": 25680,
+      "net_pnl": -58556.8953,
+      "composite_score": 0.3994,
+      "gate_passed": false,
+      "failed_gates": [
+        "min_win_rate: 0.273 < 0.4",
+        "min_profit_factor: 0.322 < 1.1",
+        "max_drawdown: 3602.966 > limit",
+        "min_net_pnl: -58556.895 < 0.0",
+        "walk_forward_positive_fold_ratio: 0.000 < 0.600",
+        "walk_forward_median_oos_net_pnl: -142.075 <= 0.000"
+      ],
+      "walk_forward": {
+        "folds": 299,
+        "positive_folds": 0,
+        "positive_fold_ratio": 0.0,
+        "median_oos_net_pnl": -142.0751,
+        "min_positive_fold_ratio": 0.6,
+        "min_median_oos_net_pnl": 0.0,
+        "passed": false
+      },
+      "recommended_status": "quarantined"
+    },
+    "h_0006": {
+      "hypothesis_id": "h_0006",
+      "n_trades": 668,
+      "net_pnl": -1508.6663,
+      "composite_score": 0.3051,
+      "gate_passed": false,
+      "failed_gates": [
+        "min_win_rate: 0.214 < 0.4",
+        "min_profit_factor: 0.416 < 1.1",
+        "min_net_pnl: -1508.666 < 0.0",
+        "min_trades_per_day: 0.090 < 0.5",
+        "walk_forward_positive_fold_ratio: 0.013 < 0.600",
+        "walk_forward_median_oos_net_pnl: -2.992 <= 0.000"
+      ],
+      "walk_forward": {
+        "folds": 299,
+        "positive_folds": 4,
+        "positive_fold_ratio": 0.0134,
+        "median_oos_net_pnl": -2.9921,
+        "min_positive_fold_ratio": 0.6,
+        "min_median_oos_net_pnl": 0.0,
+        "passed": false
+      },
+      "recommended_status": "quarantined"
+    }
+  },
+  "timings": {
+    "load_features_seconds": 0.4751,
+    "hypotheses": {
+      "h_0001": {
+        "full_backtest_seconds": 792.4768,
+        "walk_forward_seconds": 42.8309,
+        "total_seconds": 97.2287,
+        "symbols": {
+          "CVX": 16.5435,
+          "COST": 16.8795,
+          "AMZN": 17.3372,
+          "AAPL": 19.5481,
+          "BAC": 19.7919,
+          "GOOGL": 21.061,
+          "GS": 21.5138,
+          "HD": 25.7266,
+          "JNJ": 29.03,
+          "LLY": 31.7158,
+          "MSFT": 33.3249,
+          "NVDA": 34.0254,
+          "IWM": 36.9208,
+          "JPM": 38.2366,
+          "META": 39.0905,
+          "QQQ": 42.2753,
+          "PFE": 46.9327,
+          "UNH": 47.0427,
+          "SPY": 48.8959,
+          "V": 50.4966,
+          "TSLA": 50.7428,
+          "XOM": 51.9053,
+          "WMT": 53.4401
+        }
+      },
+      "h_0002": {
+        "full_backtest_seconds": 827.0585,
+        "walk_forward_seconds": 43.2944,
+        "total_seconds": 97.8346,
+        "symbols": {
+          "COST": 17.4402,
+          "GOOGL": 17.7517,
+          "AAPL": 19.3647,
+          "HD": 20.8902,
+          "BAC": 23.7678,
+          "CVX": 25.2362,
+          "GS": 27.1559,
+          "AMZN": 27.7675,
+          "IWM": 29.9975,
+          "JNJ": 30.4467,
+          "JPM": 33.1196,
+          "LLY": 33.9612,
+          "PFE": 41.2454,
+          "QQQ": 42.8917,
+          "SPY": 44.1698,
+          "META": 44.9613,
+          "MSFT": 46.0957,
+          "NVDA": 46.2226,
+          "UNH": 46.5715,
+          "TSLA": 49.6641,
+          "V": 51.7756,
+          "WMT": 52.8865,
+          "XOM": 53.675
+        }
+      },
+      "h_0003": {
+        "full_backtest_seconds": 836.182,
+        "walk_forward_seconds": 45.7282,
+        "total_seconds": 102.2401,
+        "symbols": {
+          "CVX": 17.2077,
+          "AMZN": 17.4142,
+          "GS": 17.7965,
+          "BAC": 20.4755,
+          "HD": 20.5198,
+          "COST": 25.6961,
+          "AAPL": 26.398,
+          "GOOGL": 27.0447,
+          "IWM": 30.6168,
+          "JNJ": 30.9604,
+          "JPM": 31.6053,
+          "META": 34.3907,
+          "LLY": 42.1547,
+          "QQQ": 44.2594,
+          "TSLA": 45.2352,
+          "NVDA": 45.4477,
+          "MSFT": 47.7442,
+          "PFE": 48.0461,
+          "UNH": 48.6075,
+          "SPY": 49.6727,
+          "V": 53.8445,
+          "WMT": 55.3854,
+          "XOM": 55.6589
+        }
+      },
+      "h_0004": {
+        "full_backtest_seconds": 826.0985,
+        "walk_forward_seconds": 43.5,
+        "total_seconds": 99.0119,
+        "symbols": {
+          "AMZN": 17.2557,
+          "COST": 17.4799,
+          "GS": 18.0263,
+          "AAPL": 20.5888,
+          "GOOGL": 22.4827,
+          "BAC": 23.6319,
+          "CVX": 24.189,
+          "HD": 25.0174,
+          "JNJ": 30.3444,
+          "JPM": 30.9232,
+          "IWM": 33.2855,
+          "LLY": 33.4712,
+          "MSFT": 40.8141,
+          "META": 41.4223,
+          "NVDA": 41.7579,
+          "SPY": 44.0989,
+          "PFE": 47.8995,
+          "UNH": 49.7656,
+          "QQQ": 50.4176,
+          "TSLA": 50.898,
+          "WMT": 53.757,
+          "V": 53.9559,
+          "XOM": 54.6159
+        }
+      },
+      "h_0005": {
+        "full_backtest_seconds": 875.2252,
+        "walk_forward_seconds": 31.3637,
+        "total_seconds": 89.6436,
+        "symbols": {
+          "AMZN": 16.8667,
+          "COST": 16.9964,
+          "BAC": 17.08,
+          "HD": 17.6339,
+          "AAPL": 23.3133,
+          "CVX": 27.7238,
+          "GOOGL": 28.3693,
+          "GS": 28.3386,
+          "IWM": 32.9659,
+          "JNJ": 33.0411,
+          "JPM": 36.0811,
+          "LLY": 38.1924,
+          "META": 39.0515,
+          "NVDA": 46.7713,
+          "PFE": 47.0079,
+          "TSLA": 49.538,
+          "MSFT": 51.1346,
+          "QQQ": 51.2615,
+          "V": 52.2679,
+          "SPY": 52.5624,
+          "UNH": 54.2943,
+          "WMT": 57.222,
+          "XOM": 57.5111
+        }
+      },
+      "h_0006": {
+        "full_backtest_seconds": 573.8714,
+        "walk_forward_seconds": 30.2021,
+        "total_seconds": 67.6439,
+        "symbols": {
+          "AAPL": 13.6395,
+          "GS": 13.6657,
+          "CVX": 13.742,
+          "BAC": 14.1026,
+          "AMZN": 14.5345,
+          "HD": 15.0401,
+          "GOOGL": 15.1717,
+          "COST": 15.2993,
+          "IWM": 24.8093,
+          "JNJ": 25.0105,
+          "JPM": 25.0448,
+          "LLY": 25.2899,
+          "META": 26.4522,
+          "NVDA": 26.9823,
+          "MSFT": 27.4024,
+          "PFE": 27.468,
+          "SPY": 34.9954,
+          "QQQ": 35.0035,
+          "TSLA": 35.1943,
+          "UNH": 35.583,
+          "V": 36.1945,
+          "WMT": 36.4542,
+          "XOM": 36.7916
+        }
+      }
+    },
+    "report_write_seconds": 0.0,
+    "total_seconds": 0.0,
+    "workers": 8
+  }
+}
