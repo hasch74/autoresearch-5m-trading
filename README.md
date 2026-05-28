@@ -32,3 +32,70 @@ See `/research_policy.yaml` for the enforceable research policy and `/.github/co
 - `reports`
 - `logs`
 - `research_notes`
+
+## Research Runner CLI
+
+Run one research cycle:
+
+```powershell
+python -m src.agent_runner.runner
+```
+
+### Targeted runs
+
+Run only specific hypotheses:
+
+```powershell
+python -m src.agent_runner.runner --hypotheses h_0006
+```
+
+Exclude expensive/irrelevant hypotheses:
+
+```powershell
+python -m src.agent_runner.runner --exclude-hypotheses h_0003 h_0005
+```
+
+Run on selected symbols only:
+
+```powershell
+python -m src.agent_runner.runner --symbols SPY QQQ
+```
+
+Combine filters:
+
+```powershell
+python -m src.agent_runner.runner --workers 8 --hypotheses h_0006 --symbols SPY QQQ
+```
+
+### Fast smoke mode
+
+Use fast mode for quick iteration:
+
+```powershell
+python -m src.agent_runner.runner --fast
+```
+
+`--fast` applies defaults when not explicitly provided:
+
+- workers: `4`
+- max-days: `120`
+- symbols: `SPY`, `QQQ`
+
+Explicit flags always override fast defaults:
+
+```powershell
+python -m src.agent_runner.runner --fast --workers 8 --symbols NVDA --max-days 30
+```
+
+### Window control
+
+Restrict each symbol to the trailing N calendar days by `event_time`:
+
+```powershell
+python -m src.agent_runner.runner --max-days 120
+```
+
+### Notes
+
+- Hypothesis filtering order is deterministic: include first, then exclude.
+- Reports include execution provenance for `fast_mode`, `max_days`, hypotheses filters, and symbol filters.
