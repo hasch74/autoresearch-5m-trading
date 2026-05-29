@@ -11,6 +11,7 @@ from strategies.hypotheses.h_0015_opening_range_continuation_wide_window import 
 from strategies.hypotheses.h_0011_prev_day_low_atr_breakout_eod import PrevDayLowAtrBreakoutEod
 from strategies.hypotheses.h_0012_prev_day_low_atr_breakout_eod_wider import PrevDayLowAtrBreakoutEodWider
 from strategies.hypotheses.h_0013_unholy_grails_bbands_breakout import UnholyGrailsBbandsBreakout
+from strategies.hypotheses.h_0017_macd_signal_trend import MacdSignalTrend
 from src.types import Bar
 
 
@@ -446,6 +447,51 @@ def test_unholy_grails_bbands_breakout_skips_without_breakout() -> None:
 
     features = {
         "atr_14": 1.0,
+    }
+
+    assert hyp.generate_signals(bars, features) == []
+
+
+def test_macd_signal_trend_triggers_on_positive_histogram_flip() -> None:
+    hyp = MacdSignalTrend()
+    hyp.fast_period = 3
+    hyp.slow_period = 6
+    hyp.signal_period = 3
+    hyp.min_histogram_atr = 0.0
+
+    start = datetime(2026, 1, 2, 14, 30, tzinfo=timezone.utc)
+    closes = [100.0, 99.8, 99.6, 99.4, 99.2, 99.0, 98.6, 99.2, 98.6, 99.6]
+    bars = [_bar_at(start + timedelta(minutes=5 * i), close) for i, close in enumerate(closes)]
+
+    features = {
+        "atr_14": 1.0,
+        "minutes_since_open": 60,
+        "minutes_to_close": 180,
+        "rvol_20": 1.2,
+    }
+
+    signals = hyp.generate_signals(bars, features)
+    assert len(signals) == 1
+    assert signals[0].hypothesis_id == "h_0017"
+    assert signals[0].max_hold_bars == hyp.max_hold_bars
+
+
+def test_macd_signal_trend_blocks_without_histogram_flip_or_context() -> None:
+    hyp = MacdSignalTrend()
+    hyp.fast_period = 3
+    hyp.slow_period = 6
+    hyp.signal_period = 3
+    hyp.min_histogram_atr = 0.0
+
+    start = datetime(2026, 1, 2, 14, 30, tzinfo=timezone.utc)
+    closes = [100.0, 100.1, 100.2, 100.3, 100.4, 100.5, 100.6, 100.7, 100.8, 100.9]
+    bars = [_bar_at(start + timedelta(minutes=5 * i), close) for i, close in enumerate(closes)]
+
+    features = {
+        "atr_14": 1.0,
+        "minutes_since_open": 20,
+        "minutes_to_close": 180,
+        "rvol_20": 1.2,
     }
 
     assert hyp.generate_signals(bars, features) == []

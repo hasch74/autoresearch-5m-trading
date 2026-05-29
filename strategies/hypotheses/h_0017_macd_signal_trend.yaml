@@ -1,0 +1,43 @@
+hypothesis_id: h_0017
+name: macd_signal_trend
+version: "0.1"
+
+idea: >
+  Long-only intraday MACD trend-following setup:
+  buy when the MACD histogram flips positive while the MACD line is already above zero,
+  avoiding the open and the late-day tail.
+
+created_by: "agent"
+created_at: "2026-05-29"
+
+universe: "liquid_us_largecaps"
+timeframe: "5m"
+holding_period_bars: 18
+entry_type: "macd_signal_crossover"
+direction_bias: "long_only"
+risk_model: "fixed_fractional"
+
+required_features:
+  - atr_14
+  - minutes_since_open
+  - minutes_to_close
+  - rvol_20
+
+family: macd_trend
+
+parameters:
+  fast_period: 12
+  slow_period: 26
+  signal_period: 9
+  min_minutes_since_open: 30
+  max_minutes_since_open: 180
+  min_minutes_to_close: 45
+  min_rvol: 1.0
+  min_histogram_atr: 0.03
+  stop_distance_atr: 1.2
+  take_profit_distance_atr: 2.8
+  max_hold_bars: 18
+
+status: "draft"
+
+eval: {}
