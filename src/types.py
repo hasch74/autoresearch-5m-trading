@@ -179,6 +179,14 @@ class EvalResult:
     oos_net_pnl: float | None = None
     oos_profit_factor: float | None = None
 
+    # Optional diagnostics for filtered research runs
+    trades_by_symbol: dict[str, int] | None = None
+    net_pnl_by_symbol: dict[str, float] | None = None
+    avg_pnl_by_symbol: dict[str, float] | None = None
+    trades_by_hour: dict[int, int] | None = None
+    net_pnl_by_hour: dict[int, float] | None = None
+    avg_pnl_by_hour: dict[int, float] | None = None
+
     @property
     def avg_win_to_avg_loss(self) -> float | None:
         """Ratio of average win to average loss magnitude. None if no losses."""

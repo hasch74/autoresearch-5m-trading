@@ -344,6 +344,12 @@ class ResearchRunner:
                     "hypothesis_id": hyp_id,
                     "n_trades": scored_result.total_trades,
                     "net_pnl": scored_result.net_pnl,
+                    "trades_by_symbol": scored_result.trades_by_symbol or {},
+                    "net_pnl_by_symbol": scored_result.net_pnl_by_symbol or {},
+                    "avg_pnl_by_symbol": scored_result.avg_pnl_by_symbol or {},
+                    "trades_by_hour": scored_result.trades_by_hour or {},
+                    "net_pnl_by_hour": scored_result.net_pnl_by_hour or {},
+                    "avg_pnl_by_hour": scored_result.avg_pnl_by_hour or {},
                     "composite_score": scored_result.composite_score,
                     "gate_passed": gate.passed and wf_summary["passed"],
                     "failed_gates": failed_gates,
@@ -821,6 +827,34 @@ class ResearchRunner:
 
         weighted = lambda attr: sum(getattr(r, attr) * r.total_trades for r in results) / total_trades
 
+        trades_by_symbol: dict[str, int] = {}
+        net_pnl_by_symbol: dict[str, float] = {}
+        trades_by_hour: dict[int, int] = {}
+        net_pnl_by_hour: dict[int, float] = {}
+
+        for result in results:
+            for symbol, count in (result.trades_by_symbol or {}).items():
+                trades_by_symbol[symbol] = trades_by_symbol.get(symbol, 0) + count
+            for symbol, pnl in (result.net_pnl_by_symbol or {}).items():
+                net_pnl_by_symbol[symbol] = net_pnl_by_symbol.get(symbol, 0.0) + pnl
+            for hour, count in (result.trades_by_hour or {}).items():
+                hour_key = int(hour)
+                trades_by_hour[hour_key] = trades_by_hour.get(hour_key, 0) + count
+            for hour, pnl in (result.net_pnl_by_hour or {}).items():
+                hour_key = int(hour)
+                net_pnl_by_hour[hour_key] = net_pnl_by_hour.get(hour_key, 0.0) + pnl
+
+        avg_pnl_by_symbol = {
+            symbol: net_pnl_by_symbol[symbol] / count
+            for symbol, count in trades_by_symbol.items()
+            if count > 0
+        }
+        avg_pnl_by_hour = {
+            hour: net_pnl_by_hour[hour] / count
+            for hour, count in trades_by_hour.items()
+            if count > 0
+        }
+
         return EvalResult(
             hypothesis_id=getattr(hypothesis, "hypothesis_id", "unknown"),
             run_id="",
@@ -839,6 +873,12 @@ class ResearchRunner:
             total_trades=total_trades,
             slippage_sensitivity=round(weighted("slippage_sensitivity"), 4),
             composite_score=0.0,
+            trades_by_symbol=dict(sorted(trades_by_symbol.items())),
+            net_pnl_by_symbol={k: round(v, 4) for k, v in sorted(net_pnl_by_symbol.items())},
+            avg_pnl_by_symbol={k: round(v, 4) for k, v in sorted(avg_pnl_by_symbol.items())},
+            trades_by_hour=dict(sorted(trades_by_hour.items())),
+            net_pnl_by_hour={k: round(v, 4) for k, v in sorted(net_pnl_by_hour.items())},
+            avg_pnl_by_hour={k: round(v, 4) for k, v in sorted(avg_pnl_by_hour.items())},
         )
 
 

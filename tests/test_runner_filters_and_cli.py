@@ -370,3 +370,40 @@ def test_runner_h0007_report_includes_signal_funnel(tmp_path: Path, monkeypatch:
     }
     assert required_keys.issubset(set(funnel))
     assert funnel["executed_trades"] == result["n_trades"]
+
+
+def test_runner_report_includes_trade_breakdowns(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    features_dir = tmp_path / "features"
+    reports_dir = tmp_path / "reports"
+    features_dir.mkdir(parents=True)
+    _feature_df_h0007("SPY").to_parquet(features_dir / "SPY_5m.parquet", index=False)
+
+    monkeypatch.setattr(
+        "src.agent_runner.runner.load_all",
+        lambda _p: {"h_0007": OpeningRangeContinuationConfirmed()},
+    )
+    monkeypatch.setattr("src.agent_runner.runner.score", lambda r: r)
+    monkeypatch.setattr(
+        "src.agent_runner.runner.check_gates",
+        lambda _r: SimpleNamespace(passed=True, failed_gates=[]),
+    )
+    monkeypatch.setattr(
+        "src.agent_runner.runner.walk_forward_splits",
+        lambda df, **_kwargs: iter([(df.copy(), df.copy(), df.copy())]),
+    )
+
+    report = ResearchRunner(
+        features_dir=features_dir,
+        reports_dir=reports_dir,
+        include_hypotheses=["h_0007"],
+        workers=1,
+    ).run_once()
+
+    result = report["results"]["h_0007"]
+    assert "trades_by_symbol" in result
+    assert "net_pnl_by_symbol" in result
+    assert "avg_pnl_by_symbol" in result
+    assert "trades_by_hour" in result
+    assert "net_pnl_by_hour" in result
+    assert "avg_pnl_by_hour" in result
+    assert result["trades_by_symbol"]["SPY"] == result["n_trades"]

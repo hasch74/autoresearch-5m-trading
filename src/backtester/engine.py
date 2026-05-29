@@ -19,7 +19,7 @@ Constraints enforced:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from typing import Sequence
 
 import pandas as pd
@@ -42,6 +42,7 @@ class _CostModel:
 @dataclass
 class _OpenTrade:
     entry_bar_idx: int
+    entry_time: datetime
     symbol: str
     direction: Direction
     entry_price: float
@@ -130,6 +131,10 @@ def run_backtest(
                 exit_price = _exit_fill(bar.open, open_trade.direction, current_atr, cost_model)
                 pnl = _pnl(open_trade.entry_price, exit_price, open_trade.direction, open_trade.shares)
                 closed_trades.append({
+                    "symbol": open_trade.symbol,
+                    "entry_time": open_trade.entry_time,
+                    "entry_price": open_trade.entry_price,
+                    "exit_price": exit_price,
                     "exit_reason": "strategy_next_open",
                     "pnl": pnl,
                     "execution_cost": (open_trade.entry_execution_cost + exit_execution_cost) * open_trade.shares,
@@ -169,6 +174,7 @@ def run_backtest(
                 tp_price = _tp_price(entry_price, sig.direction, sig.take_profit_distance_atr, atr)
                 open_trade = _OpenTrade(
                     entry_bar_idx=i,
+                    entry_time=bar.event_time,
                     symbol=bar.symbol,
                     direction=sig.direction,
                     entry_price=entry_price,
@@ -185,6 +191,10 @@ def run_backtest(
             exit_price = _exit_fill(bar.close, open_trade.direction, current_atr, cost_model)
             pnl = _pnl(open_trade.entry_price, exit_price, open_trade.direction, open_trade.shares)
             closed_trades.append({
+                "symbol": open_trade.symbol,
+                "entry_time": open_trade.entry_time,
+                "entry_price": open_trade.entry_price,
+                "exit_price": exit_price,
                 "exit_reason": "session_end",
                 "pnl": pnl,
                 "execution_cost": (open_trade.entry_execution_cost + exit_execution_cost) * open_trade.shares,
@@ -285,6 +295,10 @@ def _check_exit(
         exit_price = _exit_fill(trade.stop_price, direction, exit_atr, cm)
         pnl = _pnl(trade.entry_price, exit_price, direction, trade.shares)
         return {
+            "symbol": trade.symbol,
+            "entry_time": trade.entry_time,
+            "entry_price": trade.entry_price,
+            "exit_price": exit_price,
             "exit_reason": "stop",
             "pnl": pnl,
             "execution_cost": (trade.entry_execution_cost + exit_execution_cost) * trade.shares,
@@ -297,6 +311,10 @@ def _check_exit(
         exit_price = _exit_fill(trade.tp_price, direction, exit_atr, cm)
         pnl = _pnl(trade.entry_price, exit_price, direction, trade.shares)
         return {
+            "symbol": trade.symbol,
+            "entry_time": trade.entry_time,
+            "entry_price": trade.entry_price,
+            "exit_price": exit_price,
             "exit_reason": "tp",
             "pnl": pnl,
             "execution_cost": (trade.entry_execution_cost + exit_execution_cost) * trade.shares,
@@ -310,6 +328,10 @@ def _check_exit(
         pnl = _pnl(trade.entry_price, exit_price, direction, trade.shares)
         reason = "max_hold" if bars_held >= trade.max_hold_bars else "session_end"
         return {
+            "symbol": trade.symbol,
+            "entry_time": trade.entry_time,
+            "entry_price": trade.entry_price,
+            "exit_price": exit_price,
             "exit_reason": reason,
             "pnl": pnl,
             "execution_cost": (trade.entry_execution_cost + exit_execution_cost) * trade.shares,
@@ -433,6 +455,28 @@ def _build_eval(hypothesis: object, trades: list[dict], total_bars: int) -> Eval
     # Composite score placeholder (evaluator module will override)
     composite_score = 0.0
 
+    trades_by_symbol: dict[str, int] = {}
+    net_pnl_by_symbol: dict[str, float] = {}
+    avg_pnl_by_symbol: dict[str, float] = {}
+    trades_by_hour: dict[int, int] = {}
+    net_pnl_by_hour: dict[int, float] = {}
+    avg_pnl_by_hour: dict[int, float] = {}
+
+    for trade, trade_net_pnl in zip(trades, net_trade_pnls, strict=True):
+        symbol = str(trade.get("symbol", ""))
+        if symbol:
+            trades_by_symbol[symbol] = trades_by_symbol.get(symbol, 0) + 1
+            net_pnl_by_symbol[symbol] = net_pnl_by_symbol.get(symbol, 0.0) + trade_net_pnl
+
+        exit_hour = pd.Timestamp(trade["exit_time"]).tz_convert("America/New_York").hour
+        trades_by_hour[exit_hour] = trades_by_hour.get(exit_hour, 0) + 1
+        net_pnl_by_hour[exit_hour] = net_pnl_by_hour.get(exit_hour, 0.0) + trade_net_pnl
+
+    for symbol, count in trades_by_symbol.items():
+        avg_pnl_by_symbol[symbol] = net_pnl_by_symbol[symbol] / count
+    for hour, count in trades_by_hour.items():
+        avg_pnl_by_hour[hour] = net_pnl_by_hour[hour] / count
+
     return EvalResult(
         hypothesis_id=getattr(hypothesis, "hypothesis_id", "unknown"),
         run_id="",
@@ -451,4 +495,10 @@ def _build_eval(hypothesis: object, trades: list[dict], total_bars: int) -> Eval
         total_trades=len(trades),
         slippage_sensitivity=round(slippage_sensitivity, 4),
         composite_score=composite_score,
+        trades_by_symbol=dict(sorted(trades_by_symbol.items())),
+        net_pnl_by_symbol={k: round(v, 4) for k, v in sorted(net_pnl_by_symbol.items())},
+        avg_pnl_by_symbol={k: round(v, 4) for k, v in sorted(avg_pnl_by_symbol.items())},
+        trades_by_hour=dict(sorted(trades_by_hour.items())),
+        net_pnl_by_hour={k: round(v, 4) for k, v in sorted(net_pnl_by_hour.items())},
+        avg_pnl_by_hour={k: round(v, 4) for k, v in sorted(avg_pnl_by_hour.items())},
     )

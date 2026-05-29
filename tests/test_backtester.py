@@ -239,3 +239,15 @@ def test_backtester_honors_strategy_next_open_exit() -> None:
 
     assert result.total_trades == 1
     assert result.net_pnl > 0.0
+
+
+def test_backtester_includes_trade_breakdowns() -> None:
+    df = _build_df(second_high=100.1, second_low=99.9)
+    result = run_backtest(df, _FlatHoldHypothesis({0}))
+
+    assert result.trades_by_symbol == {"SPY": 1}
+    assert result.net_pnl_by_symbol == {"SPY": result.net_pnl}
+    assert result.avg_pnl_by_symbol == {"SPY": result.net_pnl}
+    assert result.trades_by_hour == {9: 1}
+    assert result.net_pnl_by_hour == {9: result.net_pnl}
+    assert result.avg_pnl_by_hour == {9: result.net_pnl}
